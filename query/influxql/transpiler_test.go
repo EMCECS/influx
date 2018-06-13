@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -131,6 +132,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -249,6 +251,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -486,6 +489,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -706,6 +710,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -859,6 +864,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -988,6 +994,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -1099,6 +1106,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -1223,6 +1231,7 @@ func TestTranspiler(t *testing.T) {
 									},
 								},
 							},
+							MergeKey: true,
 						},
 					},
 					{
@@ -1241,6 +1250,164 @@ func TestTranspiler(t *testing.T) {
 				},
 			},
 		},
+		{
+			s: `SELECT mean(value) FROM db0..cpu WHERE time >= now() - 10m GROUP BY time(1m)`,
+			spec: &query.Spec{
+				Operations: []*query.Operation{
+					{
+						ID: "from0",
+						Spec: &functions.FromOpSpec{
+							Bucket: "db0/autogen",
+						},
+					},
+					{
+						ID: "range0",
+						Spec: &functions.RangeOpSpec{
+							Start: query.Time{Absolute: mustParseTime("2010-09-15T08:50:00Z")},
+							Stop:  query.Time{Absolute: mustParseTime("2010-09-15T09:00:00Z")},
+						},
+					},
+					{
+						ID: "filter0",
+						Spec: &functions.FilterOpSpec{
+							Fn: &semantic.FunctionExpression{
+								Params: []*semantic.FunctionParam{
+									{Key: &semantic.Identifier{Name: "r"}},
+								},
+								Body: &semantic.LogicalExpression{
+									Operator: ast.AndOperator,
+									Left: &semantic.BinaryExpression{
+										Operator: ast.EqualOperator,
+										Left: &semantic.MemberExpression{
+											Object: &semantic.IdentifierExpression{
+												Name: "r",
+											},
+											Property: "_measurement",
+										},
+										Right: &semantic.StringLiteral{
+											Value: "cpu",
+										},
+									},
+									Right: &semantic.BinaryExpression{
+										Operator: ast.EqualOperator,
+										Left: &semantic.MemberExpression{
+											Object: &semantic.IdentifierExpression{
+												Name: "r",
+											},
+											Property: "_field",
+										},
+										Right: &semantic.StringLiteral{
+											Value: "value",
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						ID: "group0",
+						Spec: &functions.GroupOpSpec{
+							By: []string{"_measurement"},
+						},
+					},
+					{
+						ID: "window0",
+						Spec: &functions.WindowOpSpec{
+							Every:         query.Duration(time.Minute),
+							Period:        query.Duration(time.Minute),
+							TimeCol:       execute.DefaultTimeColLabel,
+							StartColLabel: execute.DefaultStartColLabel,
+							StopColLabel:  execute.DefaultStopColLabel,
+						},
+					},
+					{
+						ID: "mean0",
+						Spec: &functions.MeanOpSpec{
+							AggregateConfig: execute.AggregateConfig{
+								TimeSrc: execute.DefaultStartColLabel,
+								TimeDst: execute.DefaultTimeColLabel,
+								Columns: []string{execute.DefaultValueColLabel},
+							},
+						},
+					},
+					{
+						ID: "window1",
+						Spec: &functions.WindowOpSpec{
+							Every:         query.Duration(math.MaxInt64),
+							Period:        query.Duration(math.MaxInt64),
+							TimeCol:       execute.DefaultTimeColLabel,
+							StartColLabel: execute.DefaultStartColLabel,
+							StopColLabel:  execute.DefaultStopColLabel,
+						},
+					},
+					{
+						ID: "sort0",
+						Spec: &functions.SortOpSpec{
+							Cols: []string{execute.DefaultStartColLabel},
+						},
+					},
+					{
+						ID: "map0",
+						Spec: &functions.MapOpSpec{
+							Fn: &semantic.FunctionExpression{
+								Params: []*semantic.FunctionParam{{
+									Key: &semantic.Identifier{Name: "r"},
+								}},
+								Body: &semantic.ObjectExpression{
+									Properties: []*semantic.Property{
+										{
+											Key: &semantic.Identifier{Name: "time"},
+											Value: &semantic.MemberExpression{
+												Object: &semantic.IdentifierExpression{
+													Name: "r",
+												},
+												Property: "_time",
+											},
+										},
+										{
+											Key: &semantic.Identifier{Name: "_measurement"},
+											Value: &semantic.MemberExpression{
+												Object: &semantic.IdentifierExpression{
+													Name: "r",
+												},
+												Property: "_measurement",
+											},
+										},
+										{
+											Key: &semantic.Identifier{Name: "mean"},
+											Value: &semantic.MemberExpression{
+												Object: &semantic.IdentifierExpression{
+													Name: "r",
+												},
+												Property: "_value",
+											},
+										},
+									},
+								},
+							},
+							MergeKey: true,
+						},
+					},
+					{
+						ID: "yield0",
+						Spec: &functions.YieldOpSpec{
+							Name: "0",
+						},
+					},
+				},
+				Edges: []query.Edge{
+					{Parent: "from0", Child: "range0"},
+					{Parent: "range0", Child: "filter0"},
+					{Parent: "filter0", Child: "group0"},
+					{Parent: "group0", Child: "window0"},
+					{Parent: "window0", Child: "mean0"},
+					{Parent: "mean0", Child: "window1"},
+					{Parent: "window1", Child: "sort0"},
+					{Parent: "sort0", Child: "map0"},
+					{Parent: "map0", Child: "yield0"},
+				},
+			},
+		},
 	} {
 		t.Run(tt.s, func(t *testing.T) {
 			if err := tt.spec.Validate(); err != nil {
@@ -1248,6 +1415,9 @@ func TestTranspiler(t *testing.T) {
 			}
 
 			transpiler := influxql.NewTranspiler()
+			transpiler.NowFn = func() time.Time {
+				return mustParseTime("2010-09-15T09:00:00Z")
+			}
 			spec, err := transpiler.Transpile(context.Background(), tt.s)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)

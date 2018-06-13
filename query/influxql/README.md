@@ -14,6 +14,7 @@ The InfluxQL Transpiler exists to rewrite an InfluxQL query into its equivalent 
     4. [Evaluate the condition](#evaluate-condition)
     5. [Perform the grouping](#perform-grouping)
     6. [Evaluate the function](#evaluate-function)
+    7. [Combine windows](#combine-windows)
 5. [Join the groups](#join-groups)
 6. [Map and eval columns](#map-and-eval)
 
@@ -97,6 +98,14 @@ For an aggregate, the following is used instead:
         |> mean(timeSrc: "_start", columns: ["_value"])
 
 If the aggregate is combined with conditions, the column name of `_value` is replaced with whatever the generated column name is.
+
+### <a name="combine-windows"></a> Combine windows
+
+If there a window operation was added, we then combine each of the function results from the windows back into a single table and sort them by their start time.
+
+    ... |> window(every: inf) |> sort(cols: ["_start"])
+
+This step is skipped if there was no window function.
 
 ## <a name="join-groups"></a> Join the groups
 

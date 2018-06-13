@@ -72,14 +72,17 @@ func (t *transpilerState) mapFields(in cursor) (cursor, error) {
 			Value: value,
 		})
 	}
-	id := t.op("map", &functions.MapOpSpec{Fn: &semantic.FunctionExpression{
-		Params: []*semantic.FunctionParam{{
-			Key: &semantic.Identifier{Name: "r"},
-		}},
-		Body: &semantic.ObjectExpression{
-			Properties: properties,
+	id := t.op("map", &functions.MapOpSpec{
+		Fn: &semantic.FunctionExpression{
+			Params: []*semantic.FunctionParam{{
+				Key: &semantic.Identifier{Name: "r"},
+			}},
+			Body: &semantic.ObjectExpression{
+				Properties: properties,
+			},
 		},
-	}}, in.ID())
+		MergeKey: true,
+	}, in.ID())
 	return &mapCursor{id: id}, nil
 }
 
