@@ -508,8 +508,54 @@ Examples:
 
 A statement controls execution.
 
-    Statement = VarAssignment | ReturnStatement |
+    Statement = OptionStatement | VarAssignment | ReturnStatement |
                 ExpressionStatement | BlockStatment .
+
+#### Option statements
+
+Options specify a context in which a Flux query is to be run. While they are a part of the formal language definition,
+they are treated as a separate entity from a Flux query with regards to the execution model. For example, the following
+Flux script sets the `task` option to schedule a query to run periodically every hour, while the `now` option implicitly
+specifies the time range (retrospectively) over which the query is to be run:
+
+    option task = {
+        name: "mean",
+        every: 1h,
+    }
+
+    option now = now() - 5m
+
+    from(db:"metrics")
+        |> range(start:-task.freq)
+        |> group(by:["level"])
+        |> mean()
+        |> yield(name:"mean")
+
+All options are designed to be completely optional and have default values to be used when not specified by the programmer.
+Grammatically, an option statement is just a variable assignment preceded by the "option" keyword.
+
+    OptionStatement = "option" VarAssignment
+
+Below is a list of all options that are currently implemented in the Flux language:
+
+* task
+* now
+
+##### task
+
+The `task` option is used by a scheduler to schedule the execution of a Flux query. The tentative specification is as follows:
+
+    option task = {
+        name: "foo",        // name is required
+        every: 1h,          // task should be run at this interval
+        delay: 10m,         // delay scheduling this task by this duration
+        cron: "0 2 * * *",  // cron is a more sophisticated way to schedule. every and cron are mutually exclusive
+        retry: 5,           // number of times to retry a failed query
+    }
+
+##### now
+
+The `now` option sets a time value that is to be used as a proxy for the current time (Go's `time.Now()`).
 
 #### Return statements
 
