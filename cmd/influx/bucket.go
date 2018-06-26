@@ -344,17 +344,51 @@ type BucketOwnersListFlags struct {
 
 var bucketOwnersListFlags BucketOwnersListFlags
 
-func bucketOwnersListF(cmd *cobra.Comannd, args []string) {
+func bucketOwnersListF(cmd *cobra.Command, args []string) {
 	s := &http.BucketService{
 		Addr:  flags.host,
 		Token: flags.token,
 	}
 
 	if bucketOwnersListFlags.id == "" && bucketOwnersListFlags.name == "" {
-		fmt.Println("must specify either id or name")
+		fmt.Println("must specify exactly one of id and name")
 		cmd.Usage()
 		os.Exit(1)
 	}
+
+	filter := platform.BucketFilter{}
+	if bucketOwnersListFlags.name != "" {
+		filter.Name = &bucketOwnersListFlags.name
+	}
+
+	if bucketOwnersListFlags.id != "" {
+		filter.ID = &platform.ID{}
+		err := filter.ID.DecodeFromString(bucketOwnersListFlags.id)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+
+	bucket, err := s.FindBucket(context.Background(), filter)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	owners := bucket.Owners
+
+	// TODO: look up each user and output their name
+	w := internal.NewTabWriter(os.Stdout)
+	w.WriteHeaders(
+		"ID",
+	)
+	for _, id := range owners {
+		w.Write(map[string]interface{}{
+			"ID": id.String(),
+		})
+	}
+	w.Flush()
 }
 
 func init() {
@@ -365,19 +399,92 @@ func init() {
 	}
 
 	bucketOwnersListCmd.Flags().StringVarP(&bucketOwnersListFlags.id, "id", "i", "", "bucket id")
-	bucketOwnersListCmd.Flags().StringVarP(&bucketOwnersListFLags.name, "name", "n", "", "bucket name")
+	bucketOwnersListCmd.Flags().StringVarP(&bucketOwnersListFlags.name, "name", "n", "", "bucket name")
 
 	bucketOwnersCmd.AddCommand(bucketOwnersListCmd)
 }
 
 // Add Owner
 type BucketOwnersAddFlags struct {
+	name    string
+	id      string
+	ownerId string
 }
 
 var bucketOwnersAddFlags BucketOwnersAddFlags
 
-func bucketOwnersAddF(cmd *cobra.Comannd, args []string) {
+func bucketOwnersAddF(cmd *cobra.Command, args []string) {
+	s := &http.BucketService{
+		Addr:  flags.host,
+		Token: flags.token,
+	}
 
+	if bucketOwnersAddFlags.id == "" && bucketOwnersAddFlags.name == "" {
+		fmt.Println("must specify exactly one of id and name")
+		cmd.Usage()
+		os.Exit(1)
+	}
+
+	filter := platform.BucketFilter{}
+	if bucketOwnersAddFlags.name != "" {
+		filter.Name = &bucketOwnersListFlags.name
+	}
+
+	if bucketOwnersAddFlags.id != "" {
+		filter.ID = &platform.ID{}
+		err := filter.ID.DecodeFromString(bucketOwnersAddFlags.id)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+
+	bucket, err := s.FindBucket(context.Background(), filter)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	var upd platform.BucketUpdate
+	owners := bucket.Owners
+
+	updateRequired := false
+	for _, owner := range owners {
+		if owner.String() == bucketOwnersAddFlags.ownerId {
+			updateRequired = true
+			break
+		}
+	}
+
+	if updateRequired {
+		id := &platform.ID{}
+		err := id.DecodeFromString(bucketOwnersAddFlags.ownerId)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		owners = append(owners, *id)
+		upd.Owners = &owners
+
+		_, err = s.UpdateBucket(context.Background(), bucket.ID, upd)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+
+	// TODO: look up each user and output their name
+	w := internal.NewTabWriter(os.Stdout)
+	w.WriteHeaders(
+		"ID",
+	)
+	for _, id := range owners {
+		w.Write(map[string]interface{}{
+			"ID": id.String(),
+		})
+	}
+	w.Flush()
 }
 
 func init() {
@@ -388,18 +495,82 @@ func init() {
 	}
 
 	bucketOwnersAddCmd.Flags().StringVarP(&bucketOwnersAddFlags.id, "id", "i", "", "bucket id")
+	bucketOwnersAddCmd.Flags().StringVarP(&bucketOwnersAddFlags.name, "name", "n", "", "bucket name")
+	bucketOwnersAddCmd.Flags().StringVarP(&bucketOwnersAddFlags.ownerId, "owner", "o", "", "owner id")
+	bucketOwnersAddCmd.MarkFlagRequired("owner")
 
 	bucketOwnersCmd.AddCommand(bucketOwnersAddCmd)
 }
 
 // Delete Owner
 type BucketOwnersDeleteFlags struct {
+	name    string
+	id      string
+	ownerId string
 }
 
 var bucketOwnersDeleteFlags BucketOwnersDeleteFlags
 
-func bucketOwnersDeleteF(cmd *cobra.Comannd, args []string) {
+func bucketOwnersDeleteF(cmd *cobra.Command, args []string) {
+	s := &http.BucketService{
+		Addr:  flags.host,
+		Token: flags.token,
+	}
 
+	if bucketOwnersDeleteFlags.id == "" && bucketOwnersDeleteFlags.name == "" {
+		fmt.Println("must specify exactly one of id and name")
+		cmd.Usage()
+		os.Exit(1)
+	}
+
+	filter := platform.BucketFilter{}
+	if bucketOwnersDeleteFlags.name != "" {
+		filter.Name = &bucketOwnersDeleteFlags.name
+	}
+
+	if bucketOwnersDeleteFlags.id != "" {
+		filter.ID = &platform.ID{}
+		err := filter.ID.DecodeFromString(bucketOwnersDeleteFlags.id)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+
+	bucket, err := s.FindBucket(context.Background(), filter)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	var upd platform.BucketUpdate
+	owners := bucket.Owners
+
+	for i, owner := range owners {
+		if owner.String() == bucketOwnersDeleteFlags.ownerId {
+			updatedOwners := append(owners[:i], owners[i+1:]...)
+			upd.Owners = &updatedOwners
+			_, err = s.UpdateBucket(context.Background(), bucket.ID, upd)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+
+			// TODO: look up each user and output their name
+			w := internal.NewTabWriter(os.Stdout)
+			w.WriteHeaders(
+				"ID",
+			)
+			for _, id := range updatedOwners {
+				w.Write(map[string]interface{}{
+					"ID": id.String(),
+				})
+			}
+			w.Flush()
+
+			break
+		}
+	}
 }
 
 func init() {
@@ -410,6 +581,9 @@ func init() {
 	}
 
 	bucketOwnersDeleteCmd.Flags().StringVarP(&bucketOwnersDeleteFlags.id, "id", "i", "", "bucket id")
+	bucketOwnersDeleteCmd.Flags().StringVarP(&bucketOwnersDeleteFlags.name, "name", "n", "", "bucket name")
+	bucketOwnersDeleteCmd.Flags().StringVarP(&bucketOwnersDeleteFlags.ownerId, "owner", "o", "", "owner id")
+	bucketOwnersDeleteCmd.MarkFlagRequired("owner")
 
 	bucketOwnersCmd.AddCommand(bucketOwnersDeleteCmd)
 }
