@@ -575,7 +575,7 @@ func bucketOwnersDeleteF(cmd *cobra.Command, args []string) {
 
 func init() {
 	bucketOwnersDeleteCmd := &cobra.Command{
-		Use:   "delete",
+		Use:   "remove",
 		Short: "Delete bucket owner",
 		Run:   bucketOwnersDeleteF,
 	}
