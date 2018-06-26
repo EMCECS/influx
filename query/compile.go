@@ -61,7 +61,7 @@ func Compile(ctx context.Context, q string, opts ...Option) (*Spec, error) {
 		return nil, err
 	}
 
-	if err := interpreter.Eval(semProg, interpScope); err != nil {
+	if _, err := interpreter.Eval(semProg, interpScope, nil); err != nil {
 		return nil, err
 	}
 	spec := qd.ToSpec()
@@ -284,11 +284,13 @@ func builtIns(qd *queryDomain) (map[string]values.Value, semantic.DeclarationSco
 			panic(errors.Wrapf(err, "failed to create semantic graph for builtin %q", name))
 		}
 
-		if err := interpreter.Eval(semProg, interpScope); err != nil {
+		if err := interpreter.EvalBuiltIn(semProg, interpScope); err != nil {
 			panic(errors.Wrapf(err, "failed to evaluate builtin %q", name))
 		}
 	}
-	return scope, decls
+	// TODO(Josh): I think we only need the values in
+	// the top-level scope, but not totally sure about this.
+	return interpScope.GetValues(), decls
 }
 
 type Administration struct {

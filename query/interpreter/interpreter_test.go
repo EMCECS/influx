@@ -4,6 +4,7 @@ import (
 	"errors"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/influxdata/platform/query/ast"
@@ -274,7 +275,7 @@ func TestEval(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err = interpreter.Eval(graph, testScope.Nest())
+			_, err = interpreter.Eval(graph, testScope, nil)
 			if !tc.wantErr && err != nil {
 				t.Fatal(err)
 			} else if tc.wantErr && err == nil {
@@ -284,6 +285,77 @@ func TestEval(t *testing.T) {
 	}
 
 }
+
+func TestGetOptions(t *testing.T) {
+	query := `
+	option task = {
+		name: "foo",
+		repeat: 5,
+	}
+	option now = 2006-01-02T15:04:05Z
+	`
+	program, err := parser.NewAST(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := semantic.New(program, testDeclarations.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	optionsScope, err := interpreter.Eval(graph, testScope, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obj, ok := optionsScope.Lookup("task")
+	if !ok {
+		t.Errorf("Option scope does not contain identifier: %s", "task")
+	}
+	if name, ok := obj.(values.Object).Get("name"); !ok || name.Str() != "foo" {
+		t.Errorf("Expected: %s, Got: %s", "foo", name.Str())
+	}
+	if repeat, ok := obj.(values.Object).Get("repeat"); !ok || repeat.Int() != 5 {
+		t.Errorf("Expected: %d, Got: %d", 5, repeat.Int())
+	}
+
+	now, ok := optionsScope.Lookup("now")
+	if !ok {
+		t.Errorf("Option scope does not contain identifier: %s", "now")
+	}
+	if now.Time() != values.ConvertTime(parseDateTime("2006-01-02T15:04:05Z")) {
+		t.Errorf("Expected: %v, Got: %v", values.ConvertTime(parseDateTime("2006-01-02T15:04:05Z")), now.Time())
+	}
+}
+
+func TestSetOptions(t *testing.T) {
+	query := `six = six()`
+	program, err := parser.NewAST(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := semantic.New(program, testDeclarations.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	optionsScope, err := interpreter.Eval(graph, testScope, map[string]values.Value{"now": values.NewIntValue(5)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now, ok := optionsScope.Lookup("now")
+	if !ok {
+		t.Errorf("Option scope does not contain identifier: %s", "now")
+	}
+	if now.Int() != 5 {
+		t.Errorf("Expected: %d, Got: %d", 5, now.Int())
+	}
+}
+
+func parseDateTime(dt string) time.Time {
+	timeVal, _ := time.Parse(time.RFC3339, dt)
+	return timeVal
+}
+
 func TestResolver(t *testing.T) {
 	var got semantic.Expression
 	scope := interpreter.NewScope()
@@ -331,7 +403,7 @@ func TestResolver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := interpreter.Eval(graph, scope); err != nil {
+	if _, err := interpreter.Eval(graph, scope, nil); err != nil {
 		t.Fatal(err)
 	}
 

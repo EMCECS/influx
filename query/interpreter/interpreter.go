@@ -10,13 +10,44 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Eval(program *semantic.Program, scope *Scope) error {
-	itrp := interpreter{}
-	return itrp.eval(program, scope)
+// Eval evaluates a Flux program with respect to a global scope.
+// All variables are resolved to a scope below that of the input scope.
+// Option statements are allowed in a Flux program and option parameters
+// are resolved to a scope directly below that of the global(builtin) scope.
+func Eval(program *semantic.Program, scope *Scope, opts map[string]values.Value) (*Scope, error) {
+	// Ensure input scope is global scope
+	if scope == nil || scope.parent != nil {
+		return nil, errors.New("Expecting builtin scope")
+	}
+
+	// Create the options scope
+	optionsScope := scope.Nest()
+
+	// Add external options to options scope
+	optionsScope.SetValues(opts)
+
+	// Create the program scope
+	programScope := optionsScope.Nest()
+
+	// Evaluate program and resolve variables
+	err := interpreter{}.eval(program, programScope)
+
+	// Return the options scope after evaluation
+	return optionsScope, err
 }
 
-type interpreter struct {
+// EvalBuiltIn evaluates built-in programs exclusively.
+// All variables are resolved to the global(builtin) scope.
+// There are assumed to be no option statements defined in a builtin program.
+func EvalBuiltIn(program *semantic.Program, scope *Scope) error {
+	// Ensure input scope is global scope
+	if scope == nil || scope.parent != nil {
+		return errors.New("Expecting builtin scope")
+	}
+	return interpreter{}.eval(program, scope)
 }
+
+type interpreter struct{}
 
 func (itrp interpreter) eval(program *semantic.Program, scope *Scope) error {
 	for _, stmt := range program.Body {
@@ -31,7 +62,7 @@ func (itrp interpreter) doStatement(stmt semantic.Statement, scope *Scope) error
 	scope.SetReturn(values.InvalidValue)
 	switch s := stmt.(type) {
 	case *semantic.OptionStatement:
-		if err := itrp.doStatement(s.Declaration, scope); err != nil {
+		if err := itrp.doOptionDeclaration(s.Declaration, scope); err != nil {
 			return err
 		}
 	case *semantic.NativeVariableDeclaration:
@@ -69,6 +100,30 @@ func (itrp interpreter) doStatement(stmt semantic.Statement, scope *Scope) error
 	default:
 		return fmt.Errorf("unsupported statement type %T", stmt)
 	}
+	return nil
+}
+
+func (itrp interpreter) doOptionDeclaration(declaration semantic.VariableDeclaration, scope *Scope) error {
+	// Ensure scope is grandchild of global scope
+	if scope == nil ||
+		scope.parent == nil ||
+		scope.parent.parent == nil ||
+		scope.parent.parent.parent != nil {
+		return errors.New("Expecting different scope")
+	}
+
+	nativeVarDec, ok := declaration.(*semantic.NativeVariableDeclaration)
+	if !ok {
+		return errors.New("Option must be NativeVariableDeclaration")
+	}
+
+	value, err := itrp.doExpression(nativeVarDec.Init, scope)
+	if err != nil {
+		return err
+	}
+
+	// Option variables are always defined immediately below global scope
+	scope.parent.Set(nativeVarDec.Identifier.Name, value)
 	return nil
 }
 
@@ -337,9 +392,27 @@ func NewScope() *Scope {
 		values: make(map[string]values.Value),
 	}
 }
+
 func NewScopeWithValues(values map[string]values.Value) *Scope {
 	return &Scope{
 		values: values,
+	}
+}
+
+// GetValues returns all variable bindings for this scope.
+// Note that the parent scope is not included.
+func (s *Scope) GetValues() map[string]values.Value {
+	scope := make(map[string]values.Value)
+	for k, v := range s.values {
+		scope[k] = v
+	}
+	return scope
+}
+
+// SetValues adds new variable bindings to this scope en masse
+func (s *Scope) SetValues(init map[string]values.Value) {
+	for k, v := range init {
+		s.values[k] = v
 	}
 }
 
