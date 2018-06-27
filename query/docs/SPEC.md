@@ -513,9 +513,9 @@ A statement controls execution.
 
 #### Option statements
 
-Options specify a context in which a Flux query is to be run. They are similar to preprocessor
-directives in that they describe how to execute a specific Flux query. For example, the following
-Flux script sets the `task` option to schedule a query to run periodically every hour:
+Options specify a context in which a Flux query is to be run. They define variables
+that describe how to execute a Flux query. For example, the following Flux script sets
+the `task` option to schedule a query to run periodically every hour:
 
     option task = {
         name: "mean",
@@ -528,7 +528,7 @@ Flux script sets the `task` option to schedule a query to run periodically every
         |> mean()
         |> yield(name:"mean")
 
-All options are designed to be completely optional and have default values to be used when not specified by the programmer.
+All options are designed to be completely optional and have default values to be used when not specified.
 Grammatically, an option statement is just a variable assignment preceded by the "option" keyword.
 
     OptionStatement = "option" VarAssignment
@@ -540,7 +540,7 @@ Below is a list of all options that are currently implemented in the Flux langua
 
 ##### task
 
-The `task` option is used by a scheduler to schedule the execution of a Flux query. The tentative specification is as follows:
+The `task` option is used by a scheduler to schedule the execution of a Flux query.
 
     option task = {
         name: "foo",        // name is required
@@ -552,12 +552,10 @@ The `task` option is used by a scheduler to schedule the execution of a Flux que
 
 ##### now
 
-The `now` option sets a time value that is to be used as a proxy for the current system time. The tentative specification is as follows:
+The `now` option sets a time value that is to be used as a proxy for the current system time.
 
-    option now = {
-        // Query should execute as if the below time is the current system time
-        time: 2006-01-02T15:04:05Z07:00
-    }
+    // Query should execute as if the below time is the current system time
+    option now = 2006-01-02T15:04:05Z07:00
 
 #### Return statements
 
