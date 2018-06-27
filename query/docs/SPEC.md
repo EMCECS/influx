@@ -513,20 +513,17 @@ A statement controls execution.
 
 #### Option statements
 
-Options specify a context in which a Flux query is to be run. While they are a part of the formal language definition,
-they are treated as a separate entity from a Flux query with regards to the execution model. For example, the following
-Flux script sets the `task` option to schedule a query to run periodically every hour, while the `now` option implicitly
-specifies the time range (retrospectively) over which the query is to be run:
+Options specify a context in which a Flux query is to be run. They are similar to preprocessor
+directives in that they describe how to execute a specific Flux query. For example, the following
+Flux script sets the `task` option to schedule a query to run periodically every hour:
 
     option task = {
         name: "mean",
         every: 1h,
     }
 
-    option now = now() - 5m
-
     from(db:"metrics")
-        |> range(start:-task.freq)
+        |> range(start:-task.every)
         |> group(by:["level"])
         |> mean()
         |> yield(name:"mean")
@@ -555,7 +552,12 @@ The `task` option is used by a scheduler to schedule the execution of a Flux que
 
 ##### now
 
-The `now` option sets a time value that is to be used as a proxy for the current time (Go's `time.Now()`).
+The `now` option sets a time value that is to be used as a proxy for the current system time. The tentative specification is as follows:
+
+    option now = {
+        // Query should execute as if the below time is the current system time
+        time: 2006-01-02T15:04:05Z07:00
+    }
 
 #### Return statements
 
