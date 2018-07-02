@@ -55,7 +55,7 @@ func (sr *reader) Read(ctx context.Context, trace map[string]string, readSpec st
 		predicate = p
 	}
 
-	bi := &bockIterator{
+	bi := &blockIterator{
 		ctx:   ctx,
 		trace: trace,
 		bounds: execute.Bounds{
@@ -75,7 +75,7 @@ func (sr *reader) Close() {
 	}
 }
 
-type bockIterator struct {
+type blockIterator struct {
 	ctx       context.Context
 	trace     map[string]string
 	bounds    execute.Bounds
@@ -84,7 +84,7 @@ type bockIterator struct {
 	predicate *Predicate
 }
 
-func (bi *bockIterator) Do(f func(query.Block) error) error {
+func (bi *blockIterator) Do(f func(query.Block) error) error {
 	// Setup read request
 	var req ReadRequest
 	req.Database = string(bi.readSpec.BucketID)
@@ -110,7 +110,8 @@ func (bi *bockIterator) Do(f func(query.Block) error) error {
 	}
 	isGrouping := req.Group != GroupAll
 	streams := make([]*streamState, 0, len(bi.conns))
-	for _, c := range bi.conns {
+
+	for i, c := range bi.conns {
 		if len(bi.readSpec.Hosts) > 0 {
 			// Filter down to only hosts provided
 			found := false
@@ -124,10 +125,32 @@ func (bi *bockIterator) Do(f func(query.Block) error) error {
 				continue
 			}
 		}
+
 		stream, err := c.client.Read(bi.ctx, &req)
 		if err != nil {
-			return err
+			if err.Error() == "session shutdown" {
+				var h = c.host
+				println("Try to reestablish the connection to " + h + "...")
+				cc, err := yarpc.Dial(h)
+				if err == nil {
+					println("The connection to " + h + " was reestablished, retrying to read")
+					var cl = NewStorageClient(cc)
+					// replace the shutdown connection with new one
+					bi.conns[i] = connection {
+						host: h,
+						conn: cc,
+						client: cl,
+					}
+					stream, err = cl.Read(bi.ctx, &req)
+					if err != nil {
+						println("Read retry failed @ " + h + "")
+					}
+				} else {
+					println("Failed to reestablish the connection to " + h + "")
+				}
+			}
 		}
+
 		streams = append(streams, &streamState{
 			bounds:   bi.bounds,
 			stream:   stream,
@@ -146,7 +169,7 @@ func (bi *bockIterator) Do(f func(query.Block) error) error {
 	return bi.handleRead(f, ms)
 }
 
-func (bi *bockIterator) handleRead(f func(query.Block) error, ms *mergedStreams) error {
+func (bi *blockIterator) handleRead(f func(query.Block) error, ms *mergedStreams) error {
 	for ms.more() {
 		if p := ms.peek(); readFrameType(p) != seriesType {
 			//This means the consumer didn't read all the data off the block
@@ -169,7 +192,7 @@ func (bi *bockIterator) handleRead(f func(query.Block) error, ms *mergedStreams)
 	return nil
 }
 
-func (bi *bockIterator) handleGroupRead(f func(query.Block) error, ms *mergedStreams) error {
+func (bi *blockIterator) handleGroupRead(f func(query.Block) error, ms *mergedStreams) error {
 	for ms.more() {
 		if p := ms.peek(); readFrameType(p) != groupType {
 			//This means the consumer didn't read all the data off the block
