@@ -136,6 +136,7 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 					println("The connection to " + h + " was reestablished, retrying to read")
 					var cl = NewStorageClient(cc)
 					// replace the shutdown connection with new one
+					bi.conns[i].conn.Close()
 					bi.conns[i] = connection {
 						host: h,
 						conn: cc,
