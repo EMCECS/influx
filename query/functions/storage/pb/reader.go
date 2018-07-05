@@ -13,6 +13,7 @@ import (
 	"github.com/influxdata/platform/query/values"
 	"github.com/influxdata/yarpc"
 	"github.com/pkg/errors"
+	"github.com/influxdata/yamux"
 )
 
 func NewReader(hl storage.HostLookup) (*reader, error) {
@@ -128,7 +129,7 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 
 		stream, err := c.client.Read(bi.ctx, &req)
 		if err != nil {
-			if err.Error() == "session shutdown" {
+			if err == yamux.ErrSessionShutdown || err == yamux.ErrTimeout {
 				var h = c.host
 				println("Try to reestablish the connection to " + h + "...")
 				cc, err := yarpc.Dial(h)
