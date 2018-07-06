@@ -1,8 +1,14 @@
 package influxql
 
 import (
+	"fmt"
+	"math"
+	"strings"
+	"time"
+
 	"github.com/influxdata/influxql"
 	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/semantic"
 	"github.com/pkg/errors"
@@ -72,7 +78,7 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		ref, ok := gr.call.Args[0].(*influxql.VarRef)
 		if !ok {
 			// TODO(jsternberg): This should be validated and figured out somewhere else.
-			return nil, errors.New("first argument to a function call must be a variable")
+			return nil, fmt.Errorf("first argument to %q must be a variable", gr.call.Name)
 		}
 		cur, err := createVarRefCursor(t, ref)
 		if err != nil {
@@ -182,6 +188,22 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 			return nil, err
 		}
 		cur = c
+
+		// If there was a window operation, we now need to undo that and sort by the start column
+		// so they stay in the same table and are joined in the correct order.
+		if interval, err := t.stmt.GroupByInterval(); err == nil && interval > 0 {
+			cur = &groupCursor{
+				id: t.op("window", &functions.WindowOpSpec{
+					Every:              query.Duration(math.MaxInt64),
+					Period:             query.Duration(math.MaxInt64),
+					IgnoreGlobalBounds: true,
+					TimeCol:            execute.DefaultTimeColLabel,
+					StartColLabel:      execute.DefaultStartColLabel,
+					StopColLabel:       execute.DefaultStopColLabel,
+				}, cur.ID()),
+				cursor: cur,
+			}
+		}
 	}
 	return cur, nil
 }
@@ -192,10 +214,70 @@ type groupCursor struct {
 }
 
 func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
-	// TODO(jsternberg): Process group by clause correctly and windowing.
+	var windowEvery time.Duration
+	tags := []string{"_measurement"}
+	if len(t.stmt.Dimensions) > 0 {
+		// Maintain a set of the dimensions we have encountered.
+		// This is so we don't duplicate groupings, but we still maintain the
+		// listing of tags in the tags slice so it is deterministic.
+		m := make(map[string]struct{})
+		for _, d := range t.stmt.Dimensions {
+			// Reduce the expression before attempting anything. Do not evaluate the call.
+			expr := influxql.Reduce(d.Expr, nil)
+
+			switch expr := expr.(type) {
+			case *influxql.VarRef:
+				if strings.ToLower(expr.Val) == "time" {
+					return nil, errors.New("time() is a function and expects at least one argument")
+				} else if _, ok := m[expr.Val]; ok {
+					continue
+				}
+				tags = append(tags, expr.Val)
+				m[expr.Val] = struct{}{}
+			case *influxql.Call:
+				// Ensure the call is time() and it has one or two duration arguments.
+				if expr.Name != "time" {
+					return nil, errors.New("only time() calls allowed in dimensions")
+				} else if got := len(expr.Args); got < 1 || got > 2 {
+					return nil, errors.New("time dimension expected 1 or 2 arguments")
+				} else if lit, ok := expr.Args[0].(*influxql.DurationLiteral); !ok {
+					return nil, errors.New("time dimension must have duration argument")
+				} else if windowEvery != 0 {
+					return nil, errors.New("multiple time dimensions not allowed")
+				} else {
+					windowEvery = lit.Val
+					if len(expr.Args) == 2 {
+						return nil, errors.New("unimplemented: group by offsets")
+					}
+				}
+			case *influxql.Wildcard:
+				return nil, errors.New("unimplemented: dimension wildcards")
+			case *influxql.RegexLiteral:
+				return nil, errors.New("unimplemented: dimension regex wildcards")
+			default:
+				return nil, errors.New("only time and tag dimensions allowed")
+			}
+		}
+	}
+
+	// Perform the grouping by the tags we found. There is always a group by because
+	// there is always something to group in influxql.
+	// TODO(jsternberg): A wildcard will skip this step.
 	id := t.op("group", &functions.GroupOpSpec{
-		By: []string{"_measurement"},
+		By: tags,
 	}, in.ID())
+
+	if windowEvery > 0 {
+		id = t.op("window", &functions.WindowOpSpec{
+			Every:              query.Duration(windowEvery),
+			Period:             query.Duration(windowEvery),
+			IgnoreGlobalBounds: true,
+			TimeCol:            execute.DefaultTimeColLabel,
+			StartColLabel:      execute.DefaultStartColLabel,
+			StopColLabel:       execute.DefaultStopColLabel,
+		}, id)
+	}
+
 	return &groupCursor{id: id, cursor: in}, nil
 }
 

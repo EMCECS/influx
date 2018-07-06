@@ -18,7 +18,7 @@ type Transpiler struct {
 }
 
 func NewTranspiler() *Transpiler {
-	return new(Transpiler)
+	return &Transpiler{}
 }
 
 func NewTranspilerWithConfig(cfg Config) *Transpiler {
@@ -39,7 +39,7 @@ func (t *Transpiler) Transpile(ctx context.Context, txt string) (*query.Spec, er
 		stmt, ok := s.(*influxql.SelectStatement)
 		if !ok {
 			// TODO(jsternberg): Support meta queries.
-			return nil, errors.New("only supports select statements")
+			return nil, fmt.Errorf("only supports select statements: %T", s)
 		} else if err := transpiler.Transpile(ctx, i, stmt); err != nil {
 			return nil, err
 		}
@@ -60,11 +60,16 @@ func newTranspilerState(config *Config) *transpilerState {
 	state := &transpilerState{
 		spec:   &query.Spec{},
 		nextID: make(map[string]int),
-		now:    time.Now(),
 	}
 	if config != nil {
 		state.config = *config
 	}
+	if state.config.NowFn == nil {
+		state.config.NowFn = time.Now
+	}
+
+	// Stamp the current time using the now function from the config or the default.
+	state.now = state.config.NowFn()
 	return state
 }
 

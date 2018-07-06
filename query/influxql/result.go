@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/iocounter"
 )
 
@@ -48,11 +49,17 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 
 			for j, c := range b.Key().Cols() {
 				if c.Type != query.TString {
-					return fmt.Errorf("partition column %q is not a string type", c.Label)
+					// Skip any columns that aren't strings. They are extra ones that
+					// flux includes by default like the start and end times that we do not
+					// care about.
+					continue
 				}
 				v := b.Key().Value(j).Str()
 				if c.Label == "_measurement" {
 					row.Name = v
+				} else if c.Label == "_field" {
+					// If the field key was not removed by a previous operation, we explicitly
+					// ignore it here when encoding the result back.
 				} else {
 					if row.Tags == nil {
 						row.Tags = make(map[string]string)
@@ -68,7 +75,7 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 			resultColMap := map[string]int{}
 			j := 1
 			for _, c := range b.Cols() {
-				if c.Label == "time" {
+				if c.Label == execute.DefaultTimeColLabel {
 					resultColMap[c.Label] = 0
 				} else if !b.Key().HasCol(c.Label) {
 					resultColMap[c.Label] = j
@@ -78,6 +85,9 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 
 			row.Columns = make([]string, len(resultColMap))
 			for k, v := range resultColMap {
+				if k == execute.DefaultTimeColLabel {
+					k = "time"
+				}
 				row.Columns[v] = k
 			}
 

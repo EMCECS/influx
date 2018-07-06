@@ -14,6 +14,7 @@ import (
 	"github.com/influxdata/yarpc"
 	"github.com/pkg/errors"
 	"github.com/influxdata/yamux"
+	"google.golang.org/grpc"
 )
 
 func NewReader(hl storage.HostLookup) (*reader, error) {
@@ -21,7 +22,7 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 	hosts := hl.Hosts()
 	conns := make([]connection, len(hosts))
 	for i, h := range hosts {
-		conn, err := yarpc.Dial(h)
+		conn, err := grpc.Dial(h, grpc.WithInsecure())
 		if err != nil {
 			return nil, err
 		}
@@ -42,7 +43,7 @@ type reader struct {
 
 type connection struct {
 	host   string
-	conn   *yarpc.ClientConn
+	conn   *grpc.ClientConn
 	client StorageClient
 }
 
@@ -132,7 +133,7 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 			if err == yamux.ErrSessionShutdown || err == yamux.ErrTimeout {
 				var h = c.host
 				println("Try to reestablish the connection to " + h + "...")
-				cc, err := yarpc.Dial(h)
+				cc, err := grpc.Dial(h)
 				if err == nil {
 					println("The connection to " + h + " was reestablished, retrying to read")
 					var cl = NewStorageClient(cc)

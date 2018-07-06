@@ -43,23 +43,14 @@ func (t *transpilerState) mapFields(in cursor) (cursor, error) {
 		panic("number of columns does not match the number of fields")
 	}
 
-	properties := make([]*semantic.Property, 0, len(t.stmt.Fields)+2)
+	properties := make([]*semantic.Property, 0, len(t.stmt.Fields)+1)
 	properties = append(properties, &semantic.Property{
-		Key: &semantic.Identifier{Name: "time"},
+		Key: &semantic.Identifier{Name: execute.DefaultTimeColLabel},
 		Value: &semantic.MemberExpression{
 			Object: &semantic.IdentifierExpression{
 				Name: "r",
 			},
 			Property: execute.DefaultTimeColLabel,
-		},
-	})
-	properties = append(properties, &semantic.Property{
-		Key: &semantic.Identifier{Name: "_measurement"},
-		Value: &semantic.MemberExpression{
-			Object: &semantic.IdentifierExpression{
-				Name: "r",
-			},
-			Property: "_measurement",
 		},
 	})
 	for i, f := range t.stmt.Fields {
@@ -72,14 +63,17 @@ func (t *transpilerState) mapFields(in cursor) (cursor, error) {
 			Value: value,
 		})
 	}
-	id := t.op("map", &functions.MapOpSpec{Fn: &semantic.FunctionExpression{
-		Params: []*semantic.FunctionParam{{
-			Key: &semantic.Identifier{Name: "r"},
-		}},
-		Body: &semantic.ObjectExpression{
-			Properties: properties,
+	id := t.op("map", &functions.MapOpSpec{
+		Fn: &semantic.FunctionExpression{
+			Params: []*semantic.FunctionParam{{
+				Key: &semantic.Identifier{Name: "r"},
+			}},
+			Body: &semantic.ObjectExpression{
+				Properties: properties,
+			},
 		},
-	}}, in.ID())
+		MergeKey: true,
+	}, in.ID())
 	return &mapCursor{id: id}, nil
 }
 
@@ -118,7 +112,7 @@ func (t *transpilerState) mapField(expr influxql.Expr, in cursor) (semantic.Expr
 	default:
 		// TODO(jsternberg): Handle the other expressions by turning them into
 		// an equivalent expression.
-		return nil, fmt.Errorf("unimplemented: %s", expr)
+		return nil, fmt.Errorf("unimplemented: %T", expr)
 	}
 }
 
@@ -151,7 +145,7 @@ func (t *transpilerState) evalBinaryExpr(expr *influxql.BinaryExpr, in cursor) (
 		}
 	}()
 	if fn == nil {
-		return nil, fmt.Errorf("unimplemented binary expression: %s", expr)
+		return nil, fmt.Errorf("unimplemented binary expression: %s", expr.Op)
 	}
 
 	lhs, err := t.mapField(expr.LHS, in)
