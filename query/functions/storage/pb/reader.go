@@ -146,9 +146,11 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 					stream, err = cl.Read(bi.ctx, &req)
 					if err != nil {
 						println("Read retry failed @ " + h + "")
+						continue
 					}
 				} else {
 					println("Failed to reestablish the connection to " + h + "")
+					continue
 				}
 			}
 		}
