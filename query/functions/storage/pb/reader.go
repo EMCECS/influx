@@ -11,9 +11,7 @@ import (
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/functions/storage"
 	"github.com/influxdata/platform/query/values"
-	"github.com/influxdata/yarpc"
 	"github.com/pkg/errors"
-	"github.com/influxdata/yamux"
 	"google.golang.org/grpc"
 )
 
@@ -130,29 +128,27 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 
 		stream, err := c.client.Read(bi.ctx, &req)
 		if err != nil {
-			if err == yamux.ErrSessionShutdown || err == yamux.ErrTimeout {
-				var h = c.host
-				println("Try to reestablish the connection to " + h + "...")
-				cc, err := grpc.Dial(h)
-				if err == nil {
-					println("The connection to " + h + " was reestablished, retrying to read")
-					var cl = NewStorageClient(cc)
-					// replace the shutdown connection with new one
-					bi.conns[i].conn.Close()
-					bi.conns[i] = connection {
-						host: h,
-						conn: cc,
-						client: cl,
-					}
-					stream, err = cl.Read(bi.ctx, &req)
-					if err != nil {
-						println("Read retry failed @ " + h + "")
-						continue
-					}
-				} else {
-					println("Failed to reestablish the connection to " + h + "")
+			var h = c.host
+			println("Client read error, try to reestablish the connection to " + h + "...")
+			cc, err := grpc.Dial(h)
+			if err == nil {
+				println("The connection to " + h + " was reestablished, retrying to read")
+				var cl = NewStorageClient(cc)
+				// replace the shutdown connection with new one
+				bi.conns[i].conn.Close()
+				bi.conns[i] = connection {
+					host: h,
+					conn: cc,
+					client: cl,
+				}
+				stream, err = cl.Read(bi.ctx, &req)
+				if err != nil {
+					println("Read retry failed @ " + h + "")
 					continue
 				}
+			} else {
+				println("Failed to reestablish the connection to " + h + "")
+				continue
 			}
 		}
 
