@@ -2,13 +2,24 @@ language: go
 
 sudo: true
 
+env:
+  global:
+    - TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo "latest"; else echo $TRAVIS_BRANCH;fi`
+    - COMMIT=${TRAVIS_COMMIT::8}
+    - secure: "jcIZbbZzp88YR/X9vDqvFbY/5zNwE6Rcv4l67ww+WHWcIRyvu++b0huI28P2DcsaZbjBI/89L9YpoZMh8+56+CfNlxa0lQzXrs01ztpMmXpj4zSot0gb76cHrp1QZuDzkiuSABvAMc3wJwsaADFshfbLvJp1NMDeCqv2KT/un+wU4tMsdcXopFr+PD4M+hO2+NYd6p490+c75p3UKKc0yxAvD5gj5RY+qEko9SAKWDA2ElhHW2lkLBDbjSTEQHiwhO8UB5f5gwjP5FuqpvN5zSAA/R7WAWqJWOsLDWHvm2rZn40z32ZEWY5lsc2S/Vwa/JhPaMNRFtspG0bDcradJSH7Ogboq6nqxtkh+wfX2epl/avBN5+3qR8/yb/xw99qSurErbD9w2ryfu8NkfP8baWid/BBJz2uX4XhTtN4CIBCm/YRKIDaOaMD4PiC77M91kDvqkAd7iaE2006TaHI/43Bl+tnA9B9K8/F0uYibsnwIGJu8mX8KOhzjnreDfbdWYCPT0xV1BF9hQN5p309+3KhC3euEBj8zNjATdDqREgqlUEA/UUcN1u34yaF53K/xiOx7jtWwcCyxUPjBK1xjS+WbdwygHFpY84feRVWhvOB4TsRxQjTQMPXvbB2Ylt9ejsuGoQhxkZYubtzl5PZJCZJuxpLKX7p60CZbQm6lyQ="
+    - secure: "CJbKLbuEPUCUZ97Hf4k6p+0E9IBGVEkC5gF1lFpZKaQaZCZNgbsqypb3tAoYJOqvnxRJssC+nZye5/uJWWLygABvPetKtQF4op/G4lYJvkfKFzBqvqvJCVJZ+p378imVJjt8v1YiA52zKyMO3TgOB9AHWApPdc81KnsSG9fIDM35KNkDko/YfESwxITycsx/bLrxQMJGokIKenxZe5d/PgUlJZwUF36uTglec3ZSq+GZyOL35noivrGAjP9Ls70tXazHHzoM0/Ad21KZJj9+3tPjnYAb9N6qrHi6DWPX+RiG2tybWfwfbl+8zCk1a+zcmXXMH5rj1CmyLvSV/F4PvsBuaIG2C0taoHHy9DW3UWsXa+DHj4IOvoQQ0WTaWi9J/2dGhiorW8hVoTLvCM9LKvRJ7SqwpqO6/kZqouenSuj2oBnT1zVg1Xs1BKVjti98b2hqojVAfDQbDK9LYn5ONWVnBYGjz9LDGimV2i3hIceuLW0MgNPlCkFuH7Dlnp4jiJvGBSe4Arck6IiPzpkYAml7DidtHuG7tujIMQcbxF6jmrzYSEr+cHCB1Ap0xnsQTEGeI6GRasPk8BLKArc2nq4/G3ZXn5hq2yPbsm+suZTh9CSxFnLeuepVXMGy7bSPTgSQSbUCGIabpgDk1XYKrPODeoSQTbo3+G6KJ3kPaBc="
+
 before_install:
+# install go dep
 - curl -L -s https://github.com/golang/dep/releases/download/v0.3.1/dep-linux-amd64 -o $GOPATH/bin/dep
 - chmod +x $GOPATH/bin/dep
 - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+# install fresh docker
 - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
+# create the symlink to the project dir
+- echo $TRAVIS_BUILD_DIR
 
 jobs:
   include:
@@ -25,9 +36,13 @@ jobs:
     - stage: "Bench"
       script: make bench
 
-    - stage: "Build"
+    - stage: "Build Fluxd"
       script: make all
 
-    - stage: "Docker images - TODO"
+    - stage: "Docker Image"
       script:
-        - docker --version
+        - docker login -u $DOCKER_USER -p $DOCKER_PASS
+        - export REPO=akurilov/fluxd
+        - docker build -f Dockerfile -t $REPO:$COMMIT .
+        - docker tag $REPO:$COMMIT $REPO:$TAG
+        - docker push $REPO:$TAG
