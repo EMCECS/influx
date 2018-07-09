@@ -19,8 +19,10 @@ before_install:
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
 # create the symlink to the project dir
+- pwd
 - mkdir ../../influxdata
 - ln -s . ../../influxdata/platform
+- file ../../influxdata/platform
 
 jobs:
   include:
