@@ -4,7 +4,8 @@ sudo: true
 
 before_install:
 - curl -L -s https://github.com/golang/dep/releases/download/v0.3.1/dep-linux-amd64 -o $GOPATH/bin/dep
-- chmod +x $GOPATH/bin/dep- curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+- chmod +x $GOPATH/bin/dep
+- curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
@@ -13,7 +14,19 @@ jobs:
   include:
 
     - stage: "Test"
-      script: "make test"
+      script: make test
+
+    - stage: "Test Race"
+      script: make test-race
+
+    - stage: "Vet Check"
+      script: make vet
+
+    - stage: "Bench"
+      script: make bench
+
+    - stage: "Build"
+      script: make all
 
     - stage: "Docker images - TODO"
       script:
