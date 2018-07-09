@@ -19,7 +19,8 @@ before_install:
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
 # create the symlink to the project dir
-- echo $TRAVIS_BUILD_DIR
+- mkdir ../../influxdata
+- ln -s . ../../influxdata/platform
 
 jobs:
   include:
