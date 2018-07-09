@@ -26,6 +26,8 @@ before_install:
 - mkdir influxdata
 - mv -f $TRAVIS_BUILD_DIR influxdata/platform
 
+install: dep ensure -v
+
 jobs:
   include:
 
