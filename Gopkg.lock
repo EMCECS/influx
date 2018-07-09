@@ -140,6 +140,7 @@
 [[projects]]
   name = "github.com/gogo/protobuf"
   packages = [
+    "codec",
     "gogoproto",
     "proto",
     "protoc-gen-gogo/descriptor",
@@ -372,6 +373,22 @@
   name = "github.com/influxdata/tdigest"
   packages = ["."]
   revision = "617b83f940fd9acd207f712561a8a0590277fb38"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/influxdata/yamux"
+  packages = ["."]
+  revision = "1f58ded512de5feabbe30b60c7d33a7a896c5f16"
+
+[[projects]]
+  name = "github.com/influxdata/yarpc"
+  packages = [
+    ".",
+    "codes",
+    "status"
+  ]
+  revision = "b13d74d757bf9ea3e5574a491eb6646bdc4e2a04"
+  version = "v0.0.1"
 
 [[projects]]
   name = "github.com/jmespath/go-jmespath"
@@ -758,6 +775,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "386ae3e065a4de07944b9c04b34a23918a3788df6788870e0a8ce5405205ff1f"
+  inputs-digest = "fcf2b4b61741c45daf65cf1f23d971b893bffabe9a64757c1008bd57ba8a2abf"
   solver-name = "gps-cdcl"
   solver-version = 1
