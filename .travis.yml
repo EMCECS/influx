@@ -27,19 +27,29 @@ jobs:
   include:
 
     - stage: "Test"
-      script: make test
+      script:
+        - cd ../../influxdata/platform
+        - make test
 
     - stage: "Test Race"
-      script: make test-race
+      script:
+        - cd ../../influxdata/platform
+        - make test-race
 
     - stage: "Vet Check"
-      script: make vet
+      script:
+        - cd ../../influxdata/platform
+        - make vet
 
     - stage: "Bench"
-      script: make bench
+      script:
+        - cd ../../influxdata/platform
+        - make bench
 
     - stage: "Build Fluxd"
-      script: make bin/linux/fluxd
+      script:
+        - cd ../../influxdata/platform
+        - make bin/linux/fluxd
 
     - stage: "Docker Image"
       script:
