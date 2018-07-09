@@ -24,8 +24,10 @@ before_install:
 
 install:
   - cd ../..
+  - pwd
   - mkdir influxdata
-  - mv -f $TRAVIS_BUILD_DIR influxdata/platform
+  - echo $TRAVIS_BUILD_DIR
+  - mv -f $TRAVIS_BUILD_DIR $GOPATH/src/influxdata/platform
   - cd $GOPATH/src/influxdata/platform
   - dep ensure -v
 
