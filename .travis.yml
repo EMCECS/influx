@@ -18,28 +18,18 @@ before_install:
 - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
-# swap the build dir due to the forked repo
-- export UPSTREAM_DIR=$GOPATH/src/influxdata/platform
-- export FORK_DIR=$TRAVIS_BUILD_DIR
+# replace all imports from the upstream with imports from this fork
 
 install:
   - dep ensure
-  - rm -rf $UPSTREAM_DIR
-  - mkdir -p $UPSTREAM_DIR
-  - cp -rf $FORK_DIR/* $UPSTREAM_DIR/
-  - export TRAVIS_BUILD_DIR=$UPSTREAM_DIR
 
 script:
-  - cd $TRAVIS_BUILD_DIR
-  - pwd
-  - go test query/functions/unique_test.go
   - make test
   - make test-race
   - make vet
   - make bench
 
 after_success:
-  - cd $TRAVIS_BUILD_DIR
   - make bin/linux/fluxd
   - docker login -u $DOCKER_USER -p $DOCKER_PASS
   - export REPO=akurilov/influx/fluxd
