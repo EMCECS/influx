@@ -3,7 +3,7 @@ language: go
 go:
   - "1.10.2"
 
-go_import_path: github.com/influxdata/platform
+go_import_path: github.com/akurilov/platform
 
 sudo: true
 
