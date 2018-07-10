@@ -1,11 +1,5 @@
 language: go
 
-go:
-  - "1.x"
-  - "1.8"
-  - "1.10.x"
-  - master
-
 sudo: true
 
 env:
@@ -24,15 +18,17 @@ before_install:
 - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
-#
+# override the TRAVIS_BUILD_DIR due to the repo is fork
 - export TRAVIS_BUILD_DIR=$GOPATH/src/influxdata/platform
 
 
 install:
-  - cd ..
+  - echo $TRAVIS_BUILD_DIR
+  - cd $TRAVIS_BUILD_DIR/..
   - git clone https://github.com/akurilov/platform.git
 
 script:
+  - pwd
   - dep ensure
   - make test
   # - make test-race
@@ -40,6 +36,7 @@ script:
   # - make bench
 
 after_success:
+  - pwd
   - make bin/linux/fluxd
   - docker login -u $DOCKER_USER -p $DOCKER_PASS
   - export REPO=akurilov/influx/fluxd
