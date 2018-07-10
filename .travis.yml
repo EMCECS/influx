@@ -1,6 +1,6 @@
 language: go
 
-go_import_path: github.com/influxdata/platform/cmd
+go_import_path: github.com/akurilov/platform/cmd/influx/internal
 
 sudo: true
 
