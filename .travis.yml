@@ -18,10 +18,10 @@ before_install:
 - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
-# replace all imports from the upstream with imports from this fork
-- sed -i '' -e 's/\"github\.com\/influxdata\/platform\/\"github\.com\/akurilov\/platform/g' $(find . | grep \\.go$)
 
 install:
+  # replace all imports from the upstream with imports from this fork
+  - sed -i '' -e 's/\"github\.com\/influxdata\/platform/\"github\.com\/akurilov\/platform/g' $(find . | grep \\.go$)
   - dep ensure
 
 script:
