@@ -1,8 +1,5 @@
 language: go
 
-go: 
-  - "1.10.2"
-
 sudo: true
 
 env:
@@ -30,44 +27,20 @@ install:
   - mkdir -p $LOCAL_SRC_PATH
   - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
   - cd $LOCAL_SRC_PATH
-  - ls -l .
-  - dep ensure -v
+  - dep ensure
 
-jobs:
-  include:
+script:
+  - cd $LOCAL_SRC_PATH
+  - make test
+  # - make test-race
+  - make vet
+  # - make bench
 
-    - stage: "Test"
-      script:
-        - cd $LOCAL_SRC_PATH
-        - make test
-
-# Upstream fails
-#    - stage: "Test Race"
-#      script:
-#        - cd $LOCAL_SRC_PATH
-#        - make test-race
-
-    - stage: "Vet Check"
-      script:
-        - cd $LOCAL_SRC_PATH
-        - make vet
-
-# Upstream fails
-#    - stage: "Bench"
-#      script:
-#        - cd $LOCAL_SRC_PATH
-#        - make bench
-
-    - stage: "Build Fluxd"
-      script:
-        - cd $LOCAL_SRC_PATH
-        - make bin/linux/fluxd
-
-    - stage: "Docker Image"
-      script:
-        - cd $LOCAL_SRC_PATH
-        - docker login -u $DOCKER_USER -p $DOCKER_PASS
-        - export REPO=akurilov/influx/fluxd
-        - docker build -f Dockerfile -t $REPO:$COMMIT .
-        - docker tag $REPO:$COMMIT $REPO:$TAG
-        - docker push $REPO:$TAG
+deploy:
+  - cd $LOCAL_SRC_PATH
+  - make bin/linux/fluxd
+  - docker login -u $DOCKER_USER -p $DOCKER_PASS
+  - export REPO=akurilov/influx/fluxd
+  - docker build -f Dockerfile -t $REPO:$COMMIT .
+  - docker tag $REPO:$COMMIT $REPO:$TAG
+  - docker push $REPO:$TAG
