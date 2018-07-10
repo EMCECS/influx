@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/cmd/influx/internal"
 	"github.com/influxdata/platform/http"
 	"github.com/spf13/cobra"
 )
@@ -57,7 +58,7 @@ func organizationCreateF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := NewTabWriter(os.Stdout)
+	w := internal.NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
@@ -115,7 +116,7 @@ func organizationFindF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := NewTabWriter(os.Stdout)
+	w := internal.NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
@@ -175,7 +176,7 @@ func organizationUpdateF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := NewTabWriter(os.Stdout)
+	w := internal.NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
@@ -218,7 +219,7 @@ func organizationDeleteF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := NewTabWriter(os.Stdout)
+	w := internal.NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",

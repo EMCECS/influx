@@ -19,6 +19,7 @@ before_install:
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
 # replace all imports from the upstream with imports from this fork
+- sed -i '' -e 's/\"github\.com\/influxdata\/platform\/\"github\.com\/akurilov\/platform/g' $(find . | grep \\.go$)
 
 install:
   - dep ensure

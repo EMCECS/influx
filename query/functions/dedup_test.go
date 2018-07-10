@@ -7,43 +7,30 @@ import (
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/execute/executetest"
 	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/querytest"
 )
 
-func TestUniqueOperation_Marshaling(t *testing.T) {
-	data := []byte(`{"id":"unique","kind":"unique","spec":{"column":"_value"}}`)
-	op := &query.Operation{
-		ID: "unique",
-		Spec: &functions.UniqueOpSpec{
-			Column: "_value",
-		},
-	}
-	querytest.OperationMarshalingTestHelper(t, data, op)
-}
-
-func TestUnique_PassThrough(t *testing.T) {
+func TestDedup_PassThrough(t *testing.T) {
 	executetest.TransformationPassThroughTestHelper(t, func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
-		s := functions.NewUniqueTransformation(
+		s := functions.NewDedupTransformation(
 			d,
 			c,
-			&functions.UniqueProcedureSpec{
-				Column: "_value",
+			&functions.DedupProcedureSpec{
 			},
 		)
 		return s
 	})
 }
 
-func TestUnique_Process(t *testing.T) {
+func TestDedup_Process(t *testing.T) {
 	testCases := []struct {
 		name string
-		spec *functions.UniqueProcedureSpec
+		spec *functions.DedupProcedureSpec
 		data []query.Block
 		want []*executetest.Block
 	}{
 		{
 			name: "one block",
-			spec: &functions.UniqueProcedureSpec{
+			spec: &functions.DedupProcedureSpec{
 				Column: "_value",
 			},
 			data: []query.Block{&executetest.Block{
@@ -52,8 +39,8 @@ func TestUnique_Process(t *testing.T) {
 					{Label: "_value", Type: query.TFloat},
 				},
 				Data: [][]interface{}{
-					{execute.Time(1), 2.0},
-					{execute.Time(2), 1.0},
+					{execute.Time(1), 1.0},
+					{execute.Time(1), 1.0},
 					{execute.Time(3), 3.0},
 					{execute.Time(4), 1.0},
 				},
@@ -64,15 +51,15 @@ func TestUnique_Process(t *testing.T) {
 					{Label: "_value", Type: query.TFloat},
 				},
 				Data: [][]interface{}{
-					{execute.Time(1), 2.0},
-					{execute.Time(2), 1.0},
+					{execute.Time(1), 1.0},
 					{execute.Time(3), 3.0},
+					{execute.Time(4), 1.0},
 				},
 			}},
 		},
 		{
 			name: "unique tag",
-			spec: &functions.UniqueProcedureSpec{
+			spec: &functions.DedupProcedureSpec{
 				Column: "t1",
 			},
 			data: []query.Block{&executetest.Block{
@@ -85,7 +72,7 @@ func TestUnique_Process(t *testing.T) {
 					{execute.Time(1), "a", 2.0},
 					{execute.Time(2), "a", 1.0},
 					{execute.Time(3), "b", 3.0},
-					{execute.Time(4), "c", 1.0},
+					{execute.Time(2), "a", 1.0},
 				},
 			}},
 			want: []*executetest.Block{{
@@ -96,14 +83,14 @@ func TestUnique_Process(t *testing.T) {
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
+					{execute.Time(2), "a", 1.0},
 					{execute.Time(3), "b", 3.0},
-					{execute.Time(4), "c", 1.0},
 				},
 			}},
 		},
 		{
 			name: "unique times",
-			spec: &functions.UniqueProcedureSpec{
+			spec: &functions.DedupProcedureSpec{
 				Column: "_time",
 			},
 			data: []query.Block{&executetest.Block{
@@ -129,6 +116,7 @@ func TestUnique_Process(t *testing.T) {
 					{execute.Time(1), "a", 2.0},
 					{execute.Time(2), "a", 1.0},
 					{execute.Time(3), "b", 3.0},
+					{execute.Time(3), "c", 1.0},
 				},
 			}},
 		},
@@ -141,7 +129,7 @@ func TestUnique_Process(t *testing.T) {
 				tc.data,
 				tc.want,
 				func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
-					return functions.NewUniqueTransformation(d, c, tc.spec)
+					return functions.NewDedupTransformation(d, c, tc.spec)
 				},
 			)
 		})
