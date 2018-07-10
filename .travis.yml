@@ -1,5 +1,10 @@
 language: go
 
+<<<<<<< HEAD
+=======
+go_import_path: github.com/akurilov/platform/cmd/influx/internal
+
+>>>>>>> parent of 1024884... save
 sudo: true
 
 env:
