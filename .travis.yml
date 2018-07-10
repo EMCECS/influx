@@ -26,9 +26,9 @@ install:
 
 script:
   - make test
-  - make test-race
+  # - make test-race
   - make vet
-  - make bench
+  # - make bench
 
 after_success:
   - make bin/linux/fluxd
