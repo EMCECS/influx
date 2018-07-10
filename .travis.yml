@@ -7,6 +7,8 @@ sudo: true
 
 env:
   global:
+    - UPSTREAM_REL_PATH = influxdata/platform
+    - LOCAL_SRC_PATH = $GOPATH/src/$UPSTREAM_REL_PATH
     - TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo "latest"; else echo $TRAVIS_BRANCH;fi`
     - COMMIT=${TRAVIS_COMMIT::8}
     - secure: "jcIZbbZzp88YR/X9vDqvFbY/5zNwE6Rcv4l67ww+WHWcIRyvu++b0huI28P2DcsaZbjBI/89L9YpoZMh8+56+CfNlxa0lQzXrs01ztpMmXpj4zSot0gb76cHrp1QZuDzkiuSABvAMc3wJwsaADFshfbLvJp1NMDeCqv2KT/un+wU4tMsdcXopFr+PD4M+hO2+NYd6p490+c75p3UKKc0yxAvD5gj5RY+qEko9SAKWDA2ElhHW2lkLBDbjSTEQHiwhO8UB5f5gwjP5FuqpvN5zSAA/R7WAWqJWOsLDWHvm2rZn40z32ZEWY5lsc2S/Vwa/JhPaMNRFtspG0bDcradJSH7Ogboq6nqxtkh+wfX2epl/avBN5+3qR8/yb/xw99qSurErbD9w2ryfu8NkfP8baWid/BBJz2uX4XhTtN4CIBCm/YRKIDaOaMD4PiC77M91kDvqkAd7iaE2006TaHI/43Bl+tnA9B9K8/F0uYibsnwIGJu8mX8KOhzjnreDfbdWYCPT0xV1BF9hQN5p309+3KhC3euEBj8zNjATdDqREgqlUEA/UUcN1u34yaF53K/xiOx7jtWwcCyxUPjBK1xjS+WbdwygHFpY84feRVWhvOB4TsRxQjTQMPXvbB2Ylt9ejsuGoQhxkZYubtzl5PZJCZJuxpLKX7p60CZbQm6lyQ="
@@ -23,13 +25,10 @@ before_install:
 - sudo apt-get -y install docker-ce
 
 install:
-  - ls -l .
   - cd ../..
-  - pwd
-  - mkdir influxdata
-  - mv -f $TRAVIS_BUILD_DIR $GOPATH/src/influxdata/
-  - ls $GOPATH/src/influxdata
-  - cd $GOPATH/src/influxdata/platform
+  - mkdir -p $UPSTREAM_REL_PATH
+  - mv -f $TRAVIS_BUILD_DIR $LOCAL_SRC_PATH
+  - cd $LOCAL_SRC_PATH
   - dep ensure -v
 
 jobs:
@@ -37,34 +36,34 @@ jobs:
 
     - stage: "Test"
       script:
-        - cd $GOPATH/src/influxdata/platform
+        - cd $LOCAL_SRC_PATH
         - make test
 
 # Upstream fails
 #    - stage: "Test Race"
 #      script:
-#        - cd $GOPATH/src/influxdata/platform
+#        - cd $LOCAL_SRC_PATH
 #        - make test-race
 
     - stage: "Vet Check"
       script:
-        - cd $GOPATH/src/influxdata/platform
+        - cd $LOCAL_SRC_PATH
         - make vet
 
 # Upstream fails
 #    - stage: "Bench"
 #      script:
-#        - cd $GOPATH/src/influxdata/platform
+#        - cd $LOCAL_SRC_PATH
 #        - make bench
 
     - stage: "Build Fluxd"
       script:
-        - cd $GOPATH/src/influxdata/platform
+        - cd $LOCAL_SRC_PATH
         - make bin/linux/fluxd
 
     - stage: "Docker Image"
       script:
-        - cd $GOPATH/src/influxdata/platform
+        - cd $LOCAL_SRC_PATH
         - docker login -u $DOCKER_USER -p $DOCKER_PASS
         - export REPO=akurilov/influx/fluxd
         - docker build -f Dockerfile -t $REPO:$COMMIT .
