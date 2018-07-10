@@ -26,6 +26,7 @@ before_install:
 
 install:
   - cd ../..
+  - echo "$UPSTREAM_REL_PATH -> $LOCAL_SRC_PATH"
   - mkdir -p $UPSTREAM_REL_PATH
   - mv -f $TRAVIS_BUILD_DIR $LOCAL_SRC_PATH
   - cd $LOCAL_SRC_PATH
