@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/cmd/influx/internal"
 	"github.com/influxdata/platform/http"
 	"github.com/spf13/cobra"
 )
@@ -94,7 +93,7 @@ func authorizationCreateF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Token",
@@ -174,7 +173,7 @@ func authorizationFindF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Token",
@@ -244,7 +243,7 @@ func authorizationDeleteF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Token",
