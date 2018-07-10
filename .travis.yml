@@ -1,7 +1,5 @@
 language: go
 
-go_import_path: github.com/influxdata/platform/cmd/influx/internal
-
 sudo: true
 
 env:
@@ -31,7 +29,7 @@ install:
 script:
   - cd $TRAVIS_BUILD_DIR
   - dep ensure
-  - make test query/functions/unique_test.go
+  - go test query/functions/unique_test.go
   # - make test
   # - make test-race
   # - make vet
