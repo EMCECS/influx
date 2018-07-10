@@ -28,7 +28,7 @@ before_install:
 
 install:
   - mkdir -p $LOCAL_SRC_PATH
-  - mv -f $TRAVIS_BUILD_DIR $LOCAL_SRC_PATH
+  - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
   - cd $LOCAL_SRC_PATH
   - ls -l .
   - dep ensure -v
