@@ -13,12 +13,14 @@ const UniqueKind = "unique"
 
 type UniqueOpSpec struct {
 	Column string `json:"column"`
+	All bool `json:"all"`
 }
 
 var uniqueSignature = query.DefaultFunctionSignature()
 
 func init() {
 	uniqueSignature.Params["column"] = semantic.String
+	uniqueSignature.Params["all"] = semantic.Bool
 
 	query.RegisterFunction(UniqueKind, createUniqueOpSpec, uniqueSignature)
 	query.RegisterOpSpec(UniqueKind, newUniqueOp)
@@ -41,6 +43,14 @@ func createUniqueOpSpec(args query.Arguments, a *query.Administration) (query.Op
 		spec.Column = execute.DefaultValueColLabel
 	}
 
+	if all, ok, err := args.GetBool("all"); err != nil {
+		return nil, err
+	} else if ok {
+		spec.All = all
+	} else {
+		spec.All = false
+	}
+
 	return spec, nil
 }
 
@@ -54,6 +64,7 @@ func (s *UniqueOpSpec) Kind() query.OperationKind {
 
 type UniqueProcedureSpec struct {
 	Column string
+	All bool
 }
 
 func newUniqueProcedure(qs query.OperationSpec, pa plan.Administration) (plan.ProcedureSpec, error) {
@@ -64,6 +75,7 @@ func newUniqueProcedure(qs query.OperationSpec, pa plan.Administration) (plan.Pr
 
 	return &UniqueProcedureSpec{
 		Column: spec.Column,
+		All:	spec.All,
 	}, nil
 }
 
@@ -90,10 +102,11 @@ func createUniqueTransformation(id execute.DatasetID, mode execute.AccumulationM
 }
 
 type uniqueTransformation struct {
-	d     execute.Dataset
-	cache execute.BlockBuilderCache
+	d		execute.Dataset
+	cache	execute.BlockBuilderCache
 
-	column string
+	column	string
+	all		bool
 }
 
 func NewUniqueTransformation(d execute.Dataset, cache execute.BlockBuilderCache, spec *UniqueProcedureSpec) *uniqueTransformation {
@@ -101,6 +114,7 @@ func NewUniqueTransformation(d execute.Dataset, cache execute.BlockBuilderCache,
 		d:      d,
 		cache:  cache,
 		column: spec.Column,
+		all:	spec.All,
 	}
 }
 
@@ -115,12 +129,6 @@ func (t *uniqueTransformation) Process(id execute.DatasetID, b query.Block) erro
 	}
 	execute.AddBlockCols(b, builder)
 
-	colIdx := execute.ColIdx(t.column, builder.Cols())
-	if colIdx < 0 {
-		return fmt.Errorf("no column %q exists", t.column)
-	}
-	col := builder.Cols()[colIdx]
-
 	var (
 		boolUnique   map[bool]bool
 		intUnique    map[int64]bool
@@ -129,68 +137,155 @@ func (t *uniqueTransformation) Process(id execute.DatasetID, b query.Block) erro
 		stringUnique map[string]bool
 		timeUnique   map[execute.Time]bool
 	)
-	switch col.Type {
-	case query.TBool:
-		boolUnique = make(map[bool]bool)
-	case query.TInt:
+	
+	if t.all {
+		
+		boolUnique= make(map[bool]bool)
 		intUnique = make(map[int64]bool)
-	case query.TUInt:
 		uintUnique = make(map[uint64]bool)
-	case query.TFloat:
 		floatUnique = make(map[float64]bool)
-	case query.TString:
 		stringUnique = make(map[string]bool)
-	case query.TTime:
 		timeUnique = make(map[execute.Time]bool)
-	}
 
-	return b.Do(func(cr query.ColReader) error {
-		l := cr.Len()
-		for i := 0; i < l; i++ {
-			// Check unique
-			switch col.Type {
-			case query.TBool:
-				v := cr.Bools(colIdx)[i]
-				if boolUnique[v] {
-					continue
+		return b.Do(func(cr query.ColReader) error {
+			l := cr.Len()
+			colCount := len(builder.Cols())
+			// loop over the records
+			for i := 0; i < l; i ++ {
+				duplicateFlag := true
+				// loop over the columns
+				for j := 0; j < colCount; j ++ {
+					col := builder.Cols()[j]
+					switch col.Type {
+					case query.TBool:
+						v := cr.Bools(j)[i]
+						if boolUnique[v] {
+							continue
+						} else {
+							duplicateFlag = false
+						}
+						boolUnique[v] = true
+					case query.TInt:
+						v := cr.Ints(j)[i]
+						if intUnique[v] {
+							continue
+						} else {
+							duplicateFlag = false
+						}
+						intUnique[v] = true
+					case query.TUInt:
+						v := cr.UInts(j)[i]
+						if uintUnique[v] {
+							continue
+						} else {
+							duplicateFlag = false
+						}
+						uintUnique[v] = true
+					case query.TFloat:
+						v := cr.Floats(j)[i]
+						if floatUnique[v] {
+							continue
+						} else {
+							duplicateFlag = false
+						}
+						floatUnique[v] = true
+					case query.TString:
+						v := cr.Strings(j)[i]
+						if stringUnique[v] {
+							continue
+						} else {
+							duplicateFlag = false
+						}
+						stringUnique[v] = true
+					case query.TTime:
+						v := cr.Times(j)[i]
+						if timeUnique[v] {
+							continue
+						} else {
+							duplicateFlag = false
+						}
+						timeUnique[v] = true
+					}
 				}
-				boolUnique[v] = true
-			case query.TInt:
-				v := cr.Ints(colIdx)[i]
-				if intUnique[v] {
-					continue
+
+				if !duplicateFlag {
+					execute.AppendRecord(i, cr, builder)
 				}
-				intUnique[v] = true
-			case query.TUInt:
-				v := cr.UInts(colIdx)[i]
-				if uintUnique[v] {
-					continue
-				}
-				uintUnique[v] = true
-			case query.TFloat:
-				v := cr.Floats(colIdx)[i]
-				if floatUnique[v] {
-					continue
-				}
-				floatUnique[v] = true
-			case query.TString:
-				v := cr.Strings(colIdx)[i]
-				if stringUnique[v] {
-					continue
-				}
-				stringUnique[v] = true
-			case query.TTime:
-				v := cr.Times(colIdx)[i]
-				if timeUnique[v] {
-					continue
-				}
-				timeUnique[v] = true
 			}
-
-			execute.AppendRecord(i, cr, builder)
+			return nil
+		})
+		
+	} else {
+		
+		colIdx := execute.ColIdx(t.column, builder.Cols())
+		if colIdx < 0 {
+			return fmt.Errorf("no column %q exists", t.column)
 		}
-		return nil
-	})
+		col := builder.Cols()[colIdx]
+
+		switch col.Type {
+		case query.TBool:
+			boolUnique = make(map[bool]bool)
+		case query.TInt:
+			intUnique = make(map[int64]bool)
+		case query.TUInt:
+			uintUnique = make(map[uint64]bool)
+		case query.TFloat:
+			floatUnique = make(map[float64]bool)
+		case query.TString:
+			stringUnique = make(map[string]bool)
+		case query.TTime:
+			timeUnique = make(map[execute.Time]bool)
+		}
+
+		return b.Do(func(cr query.ColReader) error {
+			l := cr.Len()
+			for i := 0; i < l; i++ {
+				// Check unique
+				switch col.Type {
+				case query.TBool:
+					v := cr.Bools(colIdx)[i]
+					if boolUnique[v] {
+						continue
+					}
+					boolUnique[v] = true
+				case query.TInt:
+					v := cr.Ints(colIdx)[i]
+					if intUnique[v] {
+						continue
+					}
+					intUnique[v] = true
+				case query.TUInt:
+					v := cr.UInts(colIdx)[i]
+					if uintUnique[v] {
+						continue
+					}
+					uintUnique[v] = true
+				case query.TFloat:
+					v := cr.Floats(colIdx)[i]
+					if floatUnique[v] {
+						continue
+					}
+					floatUnique[v] = true
+				case query.TString:
+					v := cr.Strings(colIdx)[i]
+					if stringUnique[v] {
+						continue
+					}
+					stringUnique[v] = true
+				case query.TTime:
+					v := cr.Times(colIdx)[i]
+					if timeUnique[v] {
+						continue
+					}
+					timeUnique[v] = true
+				}
+
+				execute.AppendRecord(i, cr, builder)
+			}
+			return nil
+		})
+	}
 }
 
 func (t *uniqueTransformation) UpdateWatermark(id execute.DatasetID, mark execute.Time) error {

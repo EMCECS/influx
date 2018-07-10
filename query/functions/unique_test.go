@@ -147,3 +147,119 @@ func TestUnique_Process(t *testing.T) {
 		})
 	}
 }
+
+func TestDedup_Process(t *testing.T) {
+	testCases := []struct {
+		name string
+		spec *functions.UniqueProcedureSpec
+		data []query.Block
+		want []*executetest.Block
+	}{
+		{
+			name: "by time",
+			spec: &functions.UniqueProcedureSpec{
+				All: true,
+			},
+			data: []query.Block{&executetest.Block{
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+				},
+				Data: [][]interface{}{
+					{execute.Time(1), 1.0},
+					{execute.Time(1), 1.0},
+					{execute.Time(3), 3.0},
+					{execute.Time(4), 1.0},
+				},
+			}},
+			want: []*executetest.Block{{
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+				},
+				Data: [][]interface{}{
+					{execute.Time(1), 1.0},
+					{execute.Time(3), 3.0},
+					{execute.Time(4), 1.0},
+				},
+			}},
+		},
+		{
+			name: "by time & tag",
+			spec: &functions.UniqueProcedureSpec{
+				All: true,
+			},
+			data: []query.Block{&executetest.Block{
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "t1", Type: query.TString},
+					{Label: "_value", Type: query.TFloat},
+				},
+				Data: [][]interface{}{
+					{execute.Time(1), "a", 2.0},
+					{execute.Time(2), "a", 1.0},
+					{execute.Time(3), "b", 3.0},
+					{execute.Time(2), "a", 1.0},
+				},
+			}},
+			want: []*executetest.Block{{
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "t1", Type: query.TString},
+					{Label: "_value", Type: query.TFloat},
+				},
+				Data: [][]interface{}{
+					{execute.Time(1), "a", 2.0},
+					{execute.Time(2), "a", 1.0},
+					{execute.Time(3), "b", 3.0},
+				},
+			}},
+		},
+		{
+			name: "all unique",
+			spec: &functions.UniqueProcedureSpec{
+				All: true,
+			},
+			data: []query.Block{&executetest.Block{
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "t1", Type: query.TString},
+					{Label: "_value", Type: query.TFloat},
+				},
+				Data: [][]interface{}{
+					{execute.Time(1), "a", 2.0},
+					{execute.Time(2), "a", 1.0},
+					{execute.Time(3), "b", 3.0},
+					{execute.Time(3), "c", 1.0},
+				},
+			}},
+			want: []*executetest.Block{{
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "t1", Type: query.TString},
+					{Label: "_value", Type: query.TFloat},
+				},
+				Data: [][]interface{}{
+					{execute.Time(1), "a", 2.0},
+					{execute.Time(2), "a", 1.0},
+					{execute.Time(3), "b", 3.0},
+					{execute.Time(3), "c", 1.0},
+				},
+			}},
+		},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			executetest.ProcessTestHelper(
+				t,
+				tc.data,
+				tc.want,
+				func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
+					return functions.NewUniqueTransformation(d, c, tc.spec)
+				},
+			)
+		})
+	}
+}
+
