@@ -18,14 +18,13 @@ before_install:
 - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 - sudo apt-get update
 - sudo apt-get -y install docker-ce
-# override the TRAVIS_BUILD_DIR due to the repo is fork
-- export TRAVIS_BUILD_DIR=$GOPATH/src/influxdata/platform
-
+- export UPSTREAM_DIR=$GOPATH/src/influxdata/platform
 
 install:
-  - echo $TRAVIS_BUILD_DIR
-  - cd $TRAVIS_BUILD_DIR/..
-  - git clone https://github.com/akurilov/platform.git
+  - mkdir -p $UPSTREAM_DIR
+  - mv -f $TRAVIS_BUILD_DIR/* $UPSTREAM_DIR/
+  # override the TRAVIS_BUILD_DIR due to the repo is fork
+  - export TRAVIS_BUILD_DIR=$UPSTREAM_DIR
 
 script:
   - pwd
