@@ -1,7 +1,10 @@
 language: go
 
 go:
-  - "1.10.2"
+  - "1.x"
+  - "1.8"
+  - "1.10.x"
+  - master
 
 sudo: true
 
@@ -26,12 +29,13 @@ before_install:
 - export LOCAL_SRC_PATH=$GOPATH/src/$UPSTREAM_REL_PATH
 
 
-install: true
+install:
+  - mkdir -p $LOCAL_SRC_PATH
+  - cd $LOCAL_SRC_PATH/..
+  - git clone https://github.com/akurilov/platform.git
 
 script:
-  # - mkdir -p $LOCAL_SRC_PATH
-  # - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
-  # - cd $LOCAL_SRC_PATH
+  - cd $LOCAL_SRC_PATH
   - dep ensure
   - make test
   # - make test-race
@@ -39,7 +43,7 @@ script:
   # - make bench
 
 after_success:
-  # - cd $LOCAL_SRC_PATH
+  - cd $LOCAL_SRC_PATH
   - make bin/linux/fluxd
   - docker login -u $DOCKER_USER -p $DOCKER_PASS
   - export REPO=akurilov/influx/fluxd
