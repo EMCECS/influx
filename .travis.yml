@@ -3,8 +3,6 @@ language: go
 go:
   - "1.10.2"
 
-go_import_path: github.com/akurilov/platform
-
 sudo: true
 
 env:
@@ -31,9 +29,9 @@ before_install:
 install: true
 
 script:
-  - mkdir -p $LOCAL_SRC_PATH
-  - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
-  - cd $LOCAL_SRC_PATH
+  # - mkdir -p $LOCAL_SRC_PATH
+  # - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
+  # - cd $LOCAL_SRC_PATH
   - dep ensure
   - make test
   # - make test-race
@@ -41,7 +39,7 @@ script:
   # - make bench
 
 after_success:
-  - cd $LOCAL_SRC_PATH
+  # - cd $LOCAL_SRC_PATH
   - make bin/linux/fluxd
   - docker login -u $DOCKER_USER -p $DOCKER_PASS
   - export REPO=akurilov/influx/fluxd
