@@ -23,12 +23,11 @@ before_install:
 - sudo apt-get -y install docker-ce
 
 install:
-  - ls -l .
   - cd ../..
   - pwd
   - mkdir influxdata
   - echo $TRAVIS_BUILD_DIR
-  - mv -f $TRAVIS_BUILD_DIR $GOPATH/src/influxdata/platform
+  - mv -f $TRAVIS_BUILD_DIR $GOPATH/src/influxdata/
   - cd $GOPATH/src/influxdata/platform
   - dep ensure -v
 
