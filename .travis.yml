@@ -25,7 +25,6 @@ before_install:
 install:
   - mkdir -p $TRAVIS_BUILD_DIR
   - cp -rf $FORK_DIR/* $TRAVIS_BUILD_DIR/
-  - rm -rf $FORK_DIR
 
 script:
   - cd $TRAVIS_BUILD_DIR
