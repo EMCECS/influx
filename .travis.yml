@@ -26,15 +26,13 @@ before_install:
 - export LOCAL_SRC_PATH=$GOPATH/src/$UPSTREAM_REL_PATH
 
 
-install:
+install: true
+
+script:
   - mkdir -p $LOCAL_SRC_PATH
   - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
   - cd $LOCAL_SRC_PATH
   - dep ensure
-  - ls -l vendor/influxdata
-
-script:
-  - cd $LOCAL_SRC_PATH
   - make test
   # - make test-race
   - make vet
