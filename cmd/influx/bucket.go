@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/cmd/influx/internal"
 	"github.com/influxdata/platform/http"
 	"github.com/spf13/cobra"
 )
@@ -84,7 +83,7 @@ func bucketCreateF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
@@ -172,7 +171,7 @@ func bucketFindF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
@@ -242,7 +241,7 @@ func bucketUpdateF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
@@ -292,7 +291,7 @@ func bucketDeleteF(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	w := internal.NewTabWriter(os.Stdout)
+	w := NewTabWriter(os.Stdout)
 	w.WriteHeaders(
 		"ID",
 		"Name",
