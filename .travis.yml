@@ -31,7 +31,7 @@ install:
   - mv -f $TRAVIS_BUILD_DIR/* $LOCAL_SRC_PATH/
   - cd $LOCAL_SRC_PATH
   - dep ensure
-  - ls -l .
+  - ls -l vendor/influxdata
 
 script:
   - cd $LOCAL_SRC_PATH
