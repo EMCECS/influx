@@ -33,7 +33,7 @@ script:
 after_success:
   - make bin/linux/fluxd
   - docker login -u $DOCKER_USER -p $DOCKER_PASS
-  - export REPO=akurilov/influx/fluxd
+  - export REPO=akurilov/fluxd
   - docker build -f Dockerfile -t $REPO:$COMMIT .
   - docker tag $REPO:$COMMIT $REPO:$TAG
   - docker push $REPO:$TAG
