@@ -24,10 +24,11 @@ before_install:
 
 install:
   - mkdir -p $TRAVIS_BUILD_DIR
-  - mv -f $FORK_DIR/* $TRAVIS_BUILD_DIR/
+  - cp -rf $FORK_DIR/* $TRAVIS_BUILD_DIR/
+  - rm -rf $FORK_DIR
 
 script:
-  - pwd
+  - cd $TRAVIS_BUILD_DIR
   - dep ensure
   - make test
   # - make test-race
@@ -35,7 +36,7 @@ script:
   # - make bench
 
 after_success:
-  - pwd
+  - cd $TRAVIS_BUILD_DIR
   - make bin/linux/fluxd
   - docker login -u $DOCKER_USER -p $DOCKER_PASS
   - export REPO=akurilov/influx/fluxd
