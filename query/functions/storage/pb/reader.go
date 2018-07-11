@@ -126,38 +126,26 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 			}
 		}
 
-		stream, err := c.client.Read(bi.ctx, &req)
+		stream, newConn, err := readWithRecovery(&c, &bi.ctx, &req)
+
 		if err != nil {
-			var h = c.host
-			println("Client read error, try to reestablish the connection to " + h + "...")
-			cc, err := grpc.Dial(h)
-			if err == nil {
-				println("The connection to " + h + " was reestablished, retrying to read")
-				var cl = NewStorageClient(cc)
-				// replace the shutdown connection with new one
-				bi.conns[i].conn.Close()
-				bi.conns[i] = connection {
-					host: h,
-					conn: cc,
-					client: cl,
-				}
-				stream, err = cl.Read(bi.ctx, &req)
-				if err != nil {
-					println("Read retry failed @ " + h + "")
-					continue
-				}
-			} else {
-				println("Failed to reestablish the connection to " + h + "")
-				continue
-			}
+			println("Client read error: " + err.Error())
 		}
 
-		streams = append(streams, &streamState{
-			bounds:   bi.bounds,
-			stream:   stream,
-			readSpec: &bi.readSpec,
-			group:    isGrouping,
-		})
+		if newConn != nil {
+			// replace the lost connection with new one
+			bi.conns[i].conn.Close()
+			bi.conns[i] = *newConn
+		}
+
+		if stream != nil {
+			streams = append(streams, &streamState{
+				bounds:   bi.bounds,
+				stream:   stream,
+				readSpec: &bi.readSpec,
+				group:    isGrouping,
+			})
+		}
 	}
 
 	ms := &mergedStreams{
@@ -168,6 +156,31 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 		return bi.handleGroupRead(f, ms)
 	}
 	return bi.handleRead(f, ms)
+}
+
+func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (Storage_ReadClient, *connection, error) {
+	stream, err := c.client.Read(ctx, req)
+	if err == nil {
+		return stream, nil, nil
+	} else {
+		var h = c.host
+		println("Client read error, try to reestablish the connection to " + h + "...")
+		cc, err := grpc.Dial(h)
+		if err == nil {
+			println("The connection to " + h + " was reestablished, retrying to read")
+			var cl = NewStorageClient(cc)
+			var newC = &connection {
+				host: h,
+				conn: cc,
+				client: cl,
+			}
+			stream, err = cl.Read(ctx, req)
+			return stream, newC, err
+		} else {
+			println("Failed to reestablish the connection to " + h + "")
+			return nil, nil, err
+		}
+	}
 }
 
 func (bi *blockIterator) handleRead(f func(query.Block) error, ms *mergedStreams) error {
