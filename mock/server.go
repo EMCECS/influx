@@ -1,49 +1,67 @@
 package mock
 
-import (
+import(
 	"net"
 	"fmt"
-	"os"
+	"strconv"
 )
 
-const (
+const(
 	DefaultConnProt = "tcp"
 	DefaultConnHost = "localhost"
 	DefaultBuffSize = 1024
 )
 
 type ServerMock struct {
-	prot	string
-	host    string
-	port	uint16
+	prot		string
+	host 		string
+	port 		uint16
+	listener	net.Listener
+	conns		[]net.Conn
 }
 
-func NewServerMock(prot string, host string, port uint16) (*ServerMock, error) {
-	return &ServerMock {
-		prot: prot,
-		host: host,
-		port: port,
-	}, nil
-}
-
-func (s *ServerMock) Listen() {
-
-	l, err := net.Listen(s.prot, s.host + ":" + string(s.port))
-	if err != nil {
-		fmt.Println("TCP server mock error listening:", err.Error())
-		os.Exit(1)
+func NewServerMock(prot string, host string, port uint16) (*ServerMock) {
+	return &ServerMock{
+		prot: 		prot,
+		host:		host,
+		port:		port,
+		listener: 	nil,
+		conns:		make([]net.Conn, 1024),
 	}
+}
 
-	defer l.Close()
-	fmt.Println("TCP server mock is listening on " + s.host + ":" + string(s.port))
+func (this *ServerMock) Start() (error) {
+	listener, err := net.Listen(this.prot, this.host+":"+strconv.Itoa(int(this.port)))
+	this.listener = listener
+	return err
+}
+
+func (this *ServerMock) Close() (error) {
+	var lastErr error
+	err := this.listener.Close()
+	if err != nil {
+		lastErr = err
+	}
+	for _, conn := range this.conns {
+		if conn != nil {
+			err := conn.Close()
+			if err != nil {
+				lastErr = err
+			}
+		}
+	}
+	return lastErr
+}
+
+func (this *ServerMock) acceptLoop(listener net.Listener) {
 	for {
 		// Listen for an incoming connection.
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println("TCP server mock error accepting: ", err.Error())
+		conn, err := listener.Accept()
+		if err == nil {
+			this.conns = append(this.conns, conn)
+			// Handle connections in a new goroutine.
+			go handleRequest(conn)
 		}
-		// Handle connections in a new goroutine.
-		go handleRequest(conn)
 	}
 }
 
@@ -56,6 +74,5 @@ func handleRequest(conn net.Conn) {
 	if err != nil {
 		fmt.Println("TCP server mock error reading:", err.Error())
 	}
-	// Close the connection when you're done with it.
-	conn.Close()
+	conn.Write(buf)
 }

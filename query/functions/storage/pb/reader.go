@@ -159,7 +159,7 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 }
 
 func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (Storage_ReadClient, *connection, error) {
-	stream, err := c.client.Read(ctx, req)
+	stream, err := c.client.Read(*ctx, req)
 	if err == nil {
 		return stream, nil, nil
 	} else {
@@ -174,7 +174,7 @@ func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (St
 				conn: cc,
 				client: cl,
 			}
-			stream, err = cl.Read(ctx, req)
+			stream, err = cl.Read(*ctx, req)
 			return stream, newC, err
 		} else {
 			println("Failed to reestablish the connection to " + h + "")
