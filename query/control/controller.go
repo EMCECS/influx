@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -25,6 +26,8 @@ type Controller struct {
 	queries       map[QueryID]*Query
 	queryDone     chan *Query
 	cancelRequest chan QueryID
+
+	metrics *controllerMetrics
 
 	verbose bool
 
@@ -58,6 +61,7 @@ func New(c Config) *Controller {
 		lplanner:             plan.NewLogicalPlanner(),
 		pplanner:             plan.NewPlanner(),
 		executor:             execute.NewExecutor(c.ExecutorDependencies),
+		metrics:              newControllerMetrics(),
 		verbose:              c.Verbose,
 	}
 	go ctrl.run()
@@ -182,20 +186,41 @@ func (c *Controller) run() {
 		// Peek at head of priority queue
 		q := pq.Peek()
 		if q != nil {
-			err := c.processQuery(pq, q)
+			pop, err := c.processQuery(q)
 			if err != nil {
 				go q.setErr(err)
+			}
+			if pop {
+				pq.Pop()
 			}
 		}
 	}
 }
 
-func (c *Controller) processQuery(pq *PriorityQueue, q *Query) error {
+// processQuery move the query through the state machine and returns and errors and if the query should be popped.
+func (c *Controller) processQuery(q *Query) (pop bool, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			// If a query panicked, always pop it from the queue so we don't
+			// try to reprocess it.
+			pop = true
+
+			// Update the error with information about the query if this is an
+			// error type and create an error if it isn't.
+			switch e := e.(type) {
+			case error:
+				err = errors.Wrap(e, "panic")
+			default:
+				err = fmt.Errorf("panic: %s", e)
+			}
+		}
+	}()
+
 	if q.tryPlan() {
 		// Plan query to determine needed resources
 		lp, err := c.lplanner.Plan(&q.spec)
 		if err != nil {
-			return errors.Wrap(err, "failed to create logical plan")
+			return true, errors.Wrap(err, "failed to create logical plan")
 		}
 		if c.verbose {
 			log.Println("logical plan", plan.Formatted(lp))
@@ -203,7 +228,7 @@ func (c *Controller) processQuery(pq *PriorityQueue, q *Query) error {
 
 		p, err := c.pplanner.Plan(lp, nil, q.now)
 		if err != nil {
-			return errors.Wrap(err, "failed to create physical plan")
+			return true, errors.Wrap(err, "failed to create physical plan")
 		}
 		q.plan = p
 		q.concurrency = p.Resources.ConcurrencyQuota
@@ -222,24 +247,24 @@ func (c *Controller) processQuery(pq *PriorityQueue, q *Query) error {
 		c.consume(q)
 
 		// Remove the query from the queue
-		pq.Pop()
+		pop = true
 
 		// Execute query
 		if !q.tryExec() {
-			return errors.New("failed to transition query into executing state")
+			return true, errors.New("failed to transition query into executing state")
 		}
 		r, err := c.executor.Execute(q.executeCtx, q.orgID, q.plan)
 		if err != nil {
-			return errors.Wrap(err, "failed to execute query")
+			return true, errors.Wrap(err, "failed to execute query")
 		}
 		q.setResults(r)
 	} else {
 		// update state to queueing
 		if !q.tryRequeue() {
-			return errors.New("failed to transition query into requeueing state")
+			return true, errors.New("failed to transition query into requeueing state")
 		}
 	}
-	return nil
+	return pop, nil
 }
 
 func (c *Controller) check(q *Query) bool {
@@ -259,6 +284,11 @@ func (c *Controller) free(q *Query) {
 	if q.memory != math.MaxInt64 {
 		c.availableMemory += q.memory
 	}
+}
+
+// PrometheusCollectors satisifies the prom.PrometheusCollector interface.
+func (c *Controller) PrometheusCollectors() []prometheus.Collector {
+	return c.metrics.PrometheusCollectors()
 }
 
 // Query represents a single request.
@@ -389,7 +419,7 @@ func (q *Query) State() State {
 
 func (q *Query) isOK() bool {
 	q.mu.Lock()
-	ok := q.state != Canceled && q.state != Errored
+	ok := q.state != Canceled && q.state != Errored && q.state != Finished
 	q.mu.Unlock()
 	return ok
 }
@@ -431,8 +461,8 @@ func (q *Query) tryCompile() bool {
 		q.compileSpan, q.compilingCtx = StartSpanFromContext(
 			q.parentCtx,
 			"compiling",
-			compilingHist.WithLabelValues(q.labelValues...),
-			compilingGauge.WithLabelValues(q.labelValues...),
+			q.c.metrics.compilingDur.WithLabelValues(q.labelValues...),
+			q.c.metrics.compiling.WithLabelValues(q.labelValues...),
 		)
 
 		q.state = Compiling
@@ -452,8 +482,8 @@ func (q *Query) tryQueue() bool {
 		q.queueSpan, q.queueCtx = StartSpanFromContext(
 			q.parentCtx,
 			"queueing",
-			queueingHist.WithLabelValues(q.labelValues...),
-			queueingGauge.WithLabelValues(q.labelValues...),
+			q.c.metrics.queueingDur.WithLabelValues(q.labelValues...),
+			q.c.metrics.queueing.WithLabelValues(q.labelValues...),
 		)
 
 		q.state = Queueing
@@ -472,8 +502,8 @@ func (q *Query) tryRequeue() bool {
 		q.requeueSpan, q.requeueCtx = StartSpanFromContext(
 			q.parentCtx,
 			"requeueing",
-			requeueingHist.WithLabelValues(q.labelValues...),
-			requeueingGauge.WithLabelValues(q.labelValues...),
+			q.c.metrics.requeueingDur.WithLabelValues(q.labelValues...),
+			q.c.metrics.requeueing.WithLabelValues(q.labelValues...),
 		)
 
 		q.state = Requeueing
@@ -492,8 +522,8 @@ func (q *Query) tryPlan() bool {
 		q.planSpan, q.planCtx = StartSpanFromContext(
 			q.parentCtx,
 			"planning",
-			planningHist.WithLabelValues(q.labelValues...),
-			planningGauge.WithLabelValues(q.labelValues...),
+			q.c.metrics.planningDur.WithLabelValues(q.labelValues...),
+			q.c.metrics.planning.WithLabelValues(q.labelValues...),
 		)
 
 		q.state = Planning
@@ -517,8 +547,8 @@ func (q *Query) tryExec() bool {
 		q.executeSpan, q.executeCtx = StartSpanFromContext(
 			q.parentCtx,
 			"executing",
-			executingHist.WithLabelValues(q.labelValues...),
-			executingGauge.WithLabelValues(q.labelValues...),
+			q.c.metrics.executingDur.WithLabelValues(q.labelValues...),
+			q.c.metrics.executing.WithLabelValues(q.labelValues...),
 		)
 
 		q.state = Executing

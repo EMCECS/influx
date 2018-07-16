@@ -106,7 +106,7 @@ func createDifferenceTransformation(id execute.DatasetID, mode execute.Accumulat
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", spec)
 	}
-	cache := execute.NewBlockBuilderCache(a.Allocator())
+	cache := execute.NewTableBuilderCache(a.Allocator())
 	d := execute.NewDataset(id, mode, cache)
 	t := NewDifferenceTransformation(d, cache, s)
 	return t, d, nil
@@ -114,13 +114,13 @@ func createDifferenceTransformation(id execute.DatasetID, mode execute.Accumulat
 
 type differenceTransformation struct {
 	d     execute.Dataset
-	cache execute.BlockBuilderCache
+	cache execute.TableBuilderCache
 
 	nonNegative bool
 	columns     []string
 }
 
-func NewDifferenceTransformation(d execute.Dataset, cache execute.BlockBuilderCache, spec *DifferenceProcedureSpec) *differenceTransformation {
+func NewDifferenceTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *DifferenceProcedureSpec) *differenceTransformation {
 	return &differenceTransformation{
 		d:           d,
 		cache:       cache,
@@ -129,16 +129,16 @@ func NewDifferenceTransformation(d execute.Dataset, cache execute.BlockBuilderCa
 	}
 }
 
-func (t *differenceTransformation) RetractBlock(id execute.DatasetID, key query.PartitionKey) error {
-	return t.d.RetractBlock(key)
+func (t *differenceTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+	return t.d.RetractTable(key)
 }
 
-func (t *differenceTransformation) Process(id execute.DatasetID, b query.Block) error {
-	builder, created := t.cache.BlockBuilder(b.Key())
+func (t *differenceTransformation) Process(id execute.DatasetID, tbl query.Table) error {
+	builder, created := t.cache.TableBuilder(tbl.Key())
 	if !created {
-		return fmt.Errorf("difference found duplicate block with key: %v", b.Key())
+		return fmt.Errorf("difference found duplicate table with key: %v", tbl.Key())
 	}
-	cols := b.Cols()
+	cols := tbl.Cols()
 	differences := make([]*difference, len(cols))
 	for j, c := range cols {
 		found := false
@@ -169,52 +169,56 @@ func (t *differenceTransformation) Process(id execute.DatasetID, b query.Block) 
 
 	// We need to drop the first row since its derivative is undefined
 	firstIdx := 1
-	return b.Do(func(cr query.ColReader) error {
+	return tbl.Do(func(cr query.ColReader) error {
 		l := cr.Len()
-		for j, c := range cols {
-			d := differences[j]
-			switch c.Type {
-			case query.TBool:
-				builder.AppendBools(j, cr.Bools(j)[firstIdx:])
-			case query.TInt:
-				if d != nil {
-					for i := 0; i < l; i++ {
-						v := d.updateInt(cr.Ints(j)[i])
-						if i != 0 || firstIdx == 0 {
-							builder.AppendInt(j, v)
+
+		if l != 0 {
+			for j, c := range cols {
+				d := differences[j]
+				switch c.Type {
+				case query.TBool:
+					builder.AppendBools(j, cr.Bools(j)[firstIdx:])
+				case query.TInt:
+					if d != nil {
+						for i := 0; i < l; i++ {
+							v := d.updateInt(cr.Ints(j)[i])
+							if i != 0 || firstIdx == 0 {
+								builder.AppendInt(j, v)
+							}
 						}
+					} else {
+						builder.AppendInts(j, cr.Ints(j)[firstIdx:])
 					}
-				} else {
-					builder.AppendInts(j, cr.Ints(j)[firstIdx:])
-				}
-			case query.TUInt:
-				if d != nil {
-					for i := 0; i < l; i++ {
-						v := d.updateUInt(cr.UInts(j)[i])
-						if i != 0 || firstIdx == 0 {
-							builder.AppendInt(j, v)
+				case query.TUInt:
+					if d != nil {
+						for i := 0; i < l; i++ {
+							v := d.updateUInt(cr.UInts(j)[i])
+							if i != 0 || firstIdx == 0 {
+								builder.AppendInt(j, v)
+							}
 						}
+					} else {
+						builder.AppendUInts(j, cr.UInts(j)[firstIdx:])
 					}
-				} else {
-					builder.AppendUInts(j, cr.UInts(j)[firstIdx:])
-				}
-			case query.TFloat:
-				if d != nil {
-					for i := 0; i < l; i++ {
-						v := d.updateFloat(cr.Floats(j)[i])
-						if i != 0 || firstIdx == 0 {
-							builder.AppendFloat(j, v)
+				case query.TFloat:
+					if d != nil {
+						for i := 0; i < l; i++ {
+							v := d.updateFloat(cr.Floats(j)[i])
+							if i != 0 || firstIdx == 0 {
+								builder.AppendFloat(j, v)
+							}
 						}
+					} else {
+						builder.AppendFloats(j, cr.Floats(j)[firstIdx:])
 					}
-				} else {
-					builder.AppendFloats(j, cr.Floats(j)[firstIdx:])
+				case query.TString:
+					builder.AppendStrings(j, cr.Strings(j)[firstIdx:])
+				case query.TTime:
+					builder.AppendTimes(j, cr.Times(j)[firstIdx:])
 				}
-			case query.TString:
-				builder.AppendStrings(j, cr.Strings(j)[firstIdx:])
-			case query.TTime:
-				builder.AppendTimes(j, cr.Times(j)[firstIdx:])
 			}
 		}
+
 		// Now that we skipped the first row, start at 0 for the rest of the batches
 		firstIdx = 0
 		return nil
