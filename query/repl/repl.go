@@ -178,7 +178,7 @@ func (r *REPL) executeLine(t string, expectYield bool) (values.Value, error) {
 
 	// Check for yield and execute query
 	if v.Type() == query.TableObjectType {
-		t := v.(query.TableObject)
+		t := v.(*query.TableObject)
 		if !expectYield || (expectYield && t.Kind == functions.YieldKind) {
 			spec := t.ToSpec()
 			// Do query
@@ -222,10 +222,10 @@ func (r *REPL) doQuery(spec *query.Spec) error {
 
 	for _, name := range names {
 		r := results[name]
-		blocks := r.Blocks()
+		tables := r.Tables()
 		fmt.Println("Result:", name)
-		err := blocks.Do(func(b query.Block) error {
-			_, err := execute.NewFormatter(b, nil).WriteTo(os.Stdout)
+		err := tables.Do(func(tbl query.Table) error {
+			_, err := execute.NewFormatter(tbl, nil).WriteTo(os.Stdout)
 			return err
 		})
 		if err != nil {

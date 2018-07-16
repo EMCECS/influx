@@ -7,7 +7,7 @@ servers.
 
 ### Specification
 
-A complete specification can be found in [SPEC.md](./SPEC.md).
+A complete specification can be found in [SPEC.md](./docs/SPEC.md).
 
 ### INSTALLATION
 
@@ -511,7 +511,8 @@ If you need to convert other columns use the `map` function directly with the `u
 
 
 #### window
-Partitions the results by a given time range
+
+Groups the results by a given time range
 
 ##### options
 * `every` duration

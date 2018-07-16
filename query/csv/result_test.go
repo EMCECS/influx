@@ -29,7 +29,7 @@ var symetricalTestCases = []TestCase{
 		name:          "single table",
 		encoderConfig: csv.DefaultEncoderConfig(),
 		encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,42
@@ -37,7 +37,7 @@ var symetricalTestCases = []TestCase{
 `),
 		result: &executetest.Result{
 			Nm: "_result",
-			Blks: []*executetest.Block{{
+			Tbls: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -72,13 +72,13 @@ var symetricalTestCases = []TestCase{
 		name:          "single empty table",
 		encoderConfig: csv.DefaultEncoderConfig(),
 		encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,,cpu,A,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 `),
 		result: &executetest.Result{
 			Nm: "_result",
-			Blks: []*executetest.Block{{
+			Tbls: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 				KeyValues: []interface{}{
 					values.ConvertTime(time.Date(2018, 4, 17, 0, 0, 0, 0, time.UTC)),
@@ -101,7 +101,7 @@ var symetricalTestCases = []TestCase{
 		name:          "multiple tables",
 		encoderConfig: csv.DefaultEncoderConfig(),
 		encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,42
@@ -111,7 +111,7 @@ var symetricalTestCases = []TestCase{
 `),
 		result: &executetest.Result{
 			Nm: "_result",
-			Blks: []*executetest.Block{
+			Tbls: []*executetest.Table{
 				{
 					KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 					ColMeta: []query.ColMeta{
@@ -177,7 +177,7 @@ var symetricalTestCases = []TestCase{
 		name:          "multiple tables with differing schemas",
 		encoderConfig: csv.DefaultEncoderConfig(),
 		encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,42
@@ -186,7 +186,7 @@ var symetricalTestCases = []TestCase{
 ,,1,2018-04-17T00:05:00Z,2018-04-17T00:10:00Z,2018-04-17T00:07:01Z,mem,A,53
 
 #datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double,double
-#partition,false,false,true,true,false,true,false,false,false
+#group,false,false,true,true,false,true,false,false,false
 #default,_result,,,,,,,,
 ,result,table,_start,_stop,_time,location,device,min,max
 ,,2,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,USA,1563,42,67.9
@@ -196,7 +196,7 @@ var symetricalTestCases = []TestCase{
 `),
 		result: &executetest.Result{
 			Nm: "_result",
-			Blks: []*executetest.Block{
+			Tbls: []*executetest.Table{
 				{
 					KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 					ColMeta: []query.ColMeta{
@@ -326,7 +326,7 @@ var symetricalTestCases = []TestCase{
 		name:          "multiple tables with one empty",
 		encoderConfig: csv.DefaultEncoderConfig(),
 		encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,42
@@ -335,13 +335,13 @@ var symetricalTestCases = []TestCase{
 ,,1,2018-04-17T00:05:00Z,2018-04-17T00:10:00Z,2018-04-17T00:07:01Z,mem,A,53
 
 #datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,2,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,,cpu,A,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 `),
 		result: &executetest.Result{
 			Nm: "_result",
-			Blks: []*executetest.Block{
+			Tbls: []*executetest.Table{
 				{
 					KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 					ColMeta: []query.ColMeta{
@@ -428,7 +428,7 @@ func TestResultDecoder(t *testing.T) {
 			name:          "single table with defaults",
 			encoderConfig: csv.DefaultEncoderConfig(),
 			encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,,cpu,A,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,,,,2018-04-17T00:00:00Z,cpu,A,42.0
@@ -436,7 +436,7 @@ func TestResultDecoder(t *testing.T) {
 `),
 			result: &executetest.Result{
 				Nm: "_result",
-				Blks: []*executetest.Block{{
+				Tbls: []*executetest.Table{{
 					KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 					ColMeta: []query.ColMeta{
 						{Label: "_start", Type: query.TTime},
@@ -483,12 +483,12 @@ func TestResultDecoder(t *testing.T) {
 			got := &executetest.Result{
 				Nm: result.Name(),
 			}
-			if err := result.Blocks().Do(func(b query.Block) error {
-				cb, err := executetest.ConvertBlock(b)
+			if err := result.Tables().Do(func(tbl query.Table) error {
+				cb, err := executetest.ConvertTable(tbl)
 				if err != nil {
 					return err
 				}
-				got.Blks = append(got.Blks, cb)
+				got.Tbls = append(got.Tbls, cb)
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -543,7 +543,7 @@ func TestMutliResultEncoder(t *testing.T) {
 			config: csv.DefaultEncoderConfig(),
 			results: query.NewSliceResultIterator([]query.Result{&executetest.Result{
 				Nm: "_result",
-				Blks: []*executetest.Block{{
+				Tbls: []*executetest.Table{{
 					KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 					ColMeta: []query.ColMeta{
 						{Label: "_start", Type: query.TTime},
@@ -574,7 +574,7 @@ func TestMutliResultEncoder(t *testing.T) {
 				}},
 			}}),
 			encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,42
@@ -588,7 +588,7 @@ func TestMutliResultEncoder(t *testing.T) {
 			results: query.NewSliceResultIterator([]query.Result{
 				&executetest.Result{
 					Nm: "_result",
-					Blks: []*executetest.Block{{
+					Tbls: []*executetest.Table{{
 						KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 						ColMeta: []query.ColMeta{
 							{Label: "_start", Type: query.TTime},
@@ -620,7 +620,7 @@ func TestMutliResultEncoder(t *testing.T) {
 				},
 				&executetest.Result{
 					Nm: "mean",
-					Blks: []*executetest.Block{{
+					Tbls: []*executetest.Table{{
 						KeyCols: []string{"_start", "_stop", "_measurement", "host"},
 						ColMeta: []query.ColMeta{
 							{Label: "_start", Type: query.TTime},
@@ -652,14 +652,14 @@ func TestMutliResultEncoder(t *testing.T) {
 				},
 			}),
 			encoded: toCRLF(`#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,_result,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,42
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:01Z,cpu,A,43
 
 #datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,string,string,double
-#partition,false,false,true,true,false,true,true,false
+#group,false,false,true,true,false,true,true,false
 #default,mean,,,,,,,
 ,result,table,_start,_stop,_time,_measurement,host,_value
 ,,0,2018-04-17T00:00:00Z,2018-04-17T00:05:00Z,2018-04-17T00:00:00Z,cpu,A,40
