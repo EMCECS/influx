@@ -9,28 +9,28 @@ import (
 
 type Result interface {
 	Name() string
-	// Blocks returns a BlockIterator for iterating through results
-	Blocks() BlockIterator
+	// Tables returns a TableIterator for iterating through results
+	Tables() TableIterator
 }
 
-type BlockIterator interface {
-	Do(f func(Block) error) error
+type TableIterator interface {
+	Do(f func(Table) error) error
 }
 
-type Block interface {
-	Key() PartitionKey
+type Table interface {
+	Key() GroupKey
 
 	Cols() []ColMeta
 
-	// Do calls f to process the data contained within the block.
+	// Do calls f to process the data contained within the table.
 	// The function f will be called zero or more times.
 	Do(f func(ColReader) error) error
 
-	// RefCount modifies the reference count on the block by n.
-	// When the RefCount goes to zero, the block is freed.
+	// RefCount modifies the reference count on the table by n.
+	// When the RefCount goes to zero, the table is freed.
 	RefCount(n int)
 
-	// Empty returns whether the block contains no records.
+	// Empty returns whether the table contains no records.
 	Empty() bool
 }
 
@@ -76,7 +76,7 @@ func (t DataType) String() string {
 // All data the ColReader exposes is guaranteed to be in memory.
 // Once a ColReader goes out of scope all slices are considered invalid.
 type ColReader interface {
-	Key() PartitionKey
+	Key() GroupKey
 	// Cols returns a list of column metadata.
 	Cols() []ColMeta
 	// Len returns the length of the slices.
@@ -90,7 +90,7 @@ type ColReader interface {
 	Times(j int) []values.Time
 }
 
-type PartitionKey interface {
+type GroupKey interface {
 	Cols() []ColMeta
 
 	HasCol(label string) bool
@@ -104,8 +104,8 @@ type PartitionKey interface {
 	ValueTime(j int) values.Time
 	Value(j int) values.Value
 
-	Equal(o PartitionKey) bool
-	Less(o PartitionKey) bool
+	Equal(o GroupKey) bool
+	Less(o GroupKey) bool
 	String() string
 }
 
