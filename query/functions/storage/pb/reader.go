@@ -165,7 +165,7 @@ func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (St
 	} else {
 		var h = c.host
 		println("Client read error, try to reestablish the connection to " + h + "...")
-		cc, err := grpc.Dial(h)
+		cc, err := grpc.Dial(h, grpc.WithInsecure())
 		if err == nil {
 			println("The connection to " + h + " was reestablished, retrying to read")
 			var cl = NewStorageClient(cc)
