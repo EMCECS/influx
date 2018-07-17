@@ -73,7 +73,7 @@ func createDedupTransformation(id execute.DatasetID, mode execute.AccumulationMo
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", spec)
 	}
-	cache := execute.NewBlockBuilderCache(a.Allocator())
+	cache := execute.NewTableBuilderCache(a.Allocator())
 	d := execute.NewDataset(id, mode, cache)
 	t := NewDedupTransformation(d, cache, s)
 	return t, d, nil
@@ -81,27 +81,27 @@ func createDedupTransformation(id execute.DatasetID, mode execute.AccumulationMo
 
 type dedupTransformation struct {
 	d     execute.Dataset
-	cache execute.BlockBuilderCache
+	cache execute.TableBuilderCache
 }
 
-func NewDedupTransformation(d execute.Dataset, cache execute.BlockBuilderCache, spec *DedupProcedureSpec) *dedupTransformation {
+func NewDedupTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *DedupProcedureSpec) *dedupTransformation {
 	return &dedupTransformation{
 		d:      d,
 		cache:  cache,
 	}
 }
 
-func (t *dedupTransformation) RetractBlock(id execute.DatasetID, key query.PartitionKey) error {
-	return t.d.RetractBlock(key)
+func (t *dedupTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+	return t.d.RetractTable(key)
 }
 
-func (t *dedupTransformation) Process(id execute.DatasetID, b query.Block) error {
+func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error {
 
-	builder, created := t.cache.BlockBuilder(b.Key())
+	builder, created := t.cache.TableBuilder(b.Key())
 	if !created {
 		return fmt.Errorf("dedup found duplicate block with key: %v", b.Key())
 	}
-	execute.AddBlockCols(b, builder)
+	execute.AddTableCols(b, builder)
 
 	var (
 		boolDedup   map[bool]bool

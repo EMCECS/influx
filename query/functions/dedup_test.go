@@ -10,7 +10,7 @@ import (
 )
 
 func TestDedup_PassThrough(t *testing.T) {
-	executetest.TransformationPassThroughTestHelper(t, func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
+	executetest.TransformationPassThroughTestHelper(t, func(d execute.Dataset, c execute.TableBuilderCache) execute.Transformation {
 		s := functions.NewDedupTransformation(
 			d,
 			c,
@@ -25,15 +25,15 @@ func TestDedup_Process(t *testing.T) {
 	testCases := []struct {
 		name string
 		spec *functions.DedupProcedureSpec
-		data []query.Block
-		want []*executetest.Block
+		data []query.Table
+		want []*executetest.Table
 	}{
 		{
-			name: "one block",
+			name: "one Table",
 			spec: &functions.DedupProcedureSpec{
 				Column: "_value",
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "_value", Type: query.TFloat},
@@ -45,7 +45,7 @@ func TestDedup_Process(t *testing.T) {
 					{execute.Time(4), 1.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "_value", Type: query.TFloat},
@@ -62,7 +62,7 @@ func TestDedup_Process(t *testing.T) {
 			spec: &functions.DedupProcedureSpec{
 				Column: "t1",
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "t1", Type: query.TString},
@@ -75,7 +75,7 @@ func TestDedup_Process(t *testing.T) {
 					{execute.Time(2), "a", 1.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "t1", Type: query.TString},
@@ -93,7 +93,7 @@ func TestDedup_Process(t *testing.T) {
 			spec: &functions.DedupProcedureSpec{
 				Column: "_time",
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "t1", Type: query.TString},
@@ -106,7 +106,7 @@ func TestDedup_Process(t *testing.T) {
 					{execute.Time(3), "c", 1.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "t1", Type: query.TString},
@@ -128,7 +128,7 @@ func TestDedup_Process(t *testing.T) {
 				t,
 				tc.data,
 				tc.want,
-				func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
+				func(d execute.Dataset, c execute.TableBuilderCache) execute.Transformation {
 					return functions.NewDedupTransformation(d, c, tc.spec)
 				},
 			)
