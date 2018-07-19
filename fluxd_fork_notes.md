@@ -1,6 +1,6 @@
 # Build
 
-In this fork sources there are the internal imports which are pointing to the upstream source repo.
+There are the internal imports which are pointing to the upstream source repo in this fork sources.
 This may brake the build. It may be necessary to execute the additional steps before the build:
 
 1. Get the upstream sources
