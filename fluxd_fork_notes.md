@@ -41,4 +41,37 @@ curl -XPOST --data-urlencode 'q=from(db: "test_db") |> range(start: 1970-01-01T0
 
 No `window` function step argument (`every`) value dependence was measured in the range of `1m` to `1h`.
 The peak memory consumption was about 175MB and the residual memory consumption was 142MB.
-  
+
+# Changes
+
+## Connection recovery
+
+https://github.com/influxdata/platform/issues/171
+
+## Deduplication function
+
+https://github.com/influxdata/platform/issues/179
+
+The dedup function behaves like previously existing "unique" function but compares the time series using all the columns
+available. Example demonstrating the difference for the unique/dedup functions on the same data:
+
+* unique:
+```bash
+curl -XPOST --data-urlencode 'q=from(db: "test_dedup_1") |> range(start: -100h) |> unique()' http://127.0.0.1:8093/v1/query?orgID=00
+#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,double,string,string
+#partition,false,false,true,true,false,false,true,true
+#default,_result,,,,,,,
+,result,table,_start,_stop,_time,_value,_field,_measurement
+,,0,2018-07-01T04:02:57.742527076Z,2018-07-05T08:02:57.742527076Z,2018-07-05T06:41:52.015548952Z,1,value,x
+```
+
+* dedup:
+```bash
+curl -XPOST --data-urlencode 'q=from(db: "test_dedup_1") |> range(start: -100h) |> dedup()' http://127.0.0.1:8093/v1/query?orgID=00      
+#datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,double,string,string
+#partition,false,false,true,true,false,false,true,true
+#default,_result,,,,,,,
+,result,table,_start,_stop,_time,_value,_field,_measurement
+,,0,2018-07-01T04:03:06.486571927Z,2018-07-05T08:03:06.486571927Z,2018-07-05T06:41:52.015548952Z,1,value,x
+,,0,2018-07-01T04:03:06.486571927Z,2018-07-05T08:03:06.486571927Z,2018-07-05T06:41:55.969062966Z,1,value,x
+```
