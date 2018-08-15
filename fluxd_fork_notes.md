@@ -5,12 +5,13 @@ This may brake the build. It may be necessary to execute the additional steps be
 
 1. Get the upstream sources
     ```bash
-    go get influxdata/platform
+    go get github.com/influxdata/platform
     ```
 2. Go to the sources directory and set the Git origin URL to the fork
     ```bash
     cd $GOPATH/src/github.com/influxdata/platform
-    git remote set-url https://github.com/akurilov/influx
+    git remote remove origin
+    git remote add origin https://github.com/akurilov/influx
     ```
 
 3. Merge the changes from the fork, get the dependencies
