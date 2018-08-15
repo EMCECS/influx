@@ -110,7 +110,8 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	}
 	isGrouping := req.Group != GroupAll
 	streams := make([]*streamState, 0, len(bi.conns))
-	for _, c := range bi.conns {
+
+	for i, c := range bi.conns {
 		if len(bi.readSpec.Hosts) > 0 {
 			// Filter down to only hosts provided
 			found := false
@@ -124,16 +125,27 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 				continue
 			}
 		}
-		stream, err := c.client.Read(bi.ctx, &req)
+
+		stream, newConn, err := readWithRecovery(&c, &bi.ctx, &req)
+
 		if err != nil {
-			return err
+			println("Client read error: " + err.Error())
 		}
-		streams = append(streams, &streamState{
-			bounds:   bi.bounds,
-			stream:   stream,
-			readSpec: &bi.readSpec,
-			group:    isGrouping,
-		})
+
+		if newConn != nil {
+			// replace the lost connection with new one
+			bi.conns[i].conn.Close()
+			bi.conns[i] = *newConn
+		}
+
+		if stream != nil {
+			streams = append(streams, &streamState{
+				bounds:   bi.bounds,
+				stream:   stream,
+				readSpec: &bi.readSpec,
+				group:    isGrouping,
+			})
+		}
 	}
 
 	ms := &mergedStreams{
@@ -144,6 +156,31 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 		return bi.handleGroupRead(f, ms)
 	}
 	return bi.handleRead(f, ms)
+}
+
+func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (Storage_ReadClient, *connection, error) {
+	stream, err := c.client.Read(*ctx, req)
+	if err == nil {
+		return stream, nil, nil
+	} else {
+		var h = c.host
+		println("Client read error, try to reestablish the connection to " + h + "...")
+		cc, err := grpc.Dial(h, grpc.WithInsecure())
+		if err == nil {
+			println("The connection to " + h + " was reestablished, retrying to read")
+			var cl = NewStorageClient(cc)
+			var newC = &connection {
+				host: h,
+				conn: cc,
+				client: cl,
+			}
+			stream, err = cl.Read(*ctx, req)
+			return stream, newC, err
+		} else {
+			println("Failed to reestablish the connection to " + h + "")
+			return nil, nil, err
+		}
+	}
 }
 
 func (bi *tableIterator) handleRead(f func(query.Table) error, ms *mergedStreams) error {
