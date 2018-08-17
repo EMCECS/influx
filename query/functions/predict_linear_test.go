@@ -39,8 +39,6 @@ func TestPredictLinear_NewQuery(t *testing.T) {
 							ValueDst: execute.DefaultTimeColLabel,
 							WantedValue: 10.0,
 							AggregateConfig: execute.AggregateConfig{
-								TimeSrc: execute.DefaultStopColLabel,
-								TimeDst: execute.DefaultTimeColLabel,
 								Columns: []string{"a", "b"},
 							},
 						},
