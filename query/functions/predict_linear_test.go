@@ -195,6 +195,7 @@ func TestPredictLinear_Process(t *testing.T) {
 				t,
 				tc.data,
 				tc.want,
+				nil,
 				func(d execute.Dataset, c execute.TableBuilderCache) execute.Transformation {
 					return functions.NewPredictLinearTransformation(d, c, tc.spec)
 				},
