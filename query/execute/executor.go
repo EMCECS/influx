@@ -1,9 +1,11 @@
+// Package execute contains the implementation of the execution phase in the query engine.
 package execute
 
 import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"time"
 
 	"github.com/influxdata/platform"
 	"github.com/influxdata/platform/query"
@@ -12,7 +14,7 @@ import (
 )
 
 type Executor interface {
-	Execute(ctx context.Context, orgID platform.ID, p *plan.PlanSpec) (map[string]query.Result, error)
+	Execute(ctx context.Context, orgID platform.ID, p *plan.PlanSpec, a *Allocator) (map[string]query.Result, error)
 }
 
 type executor struct {
@@ -26,6 +28,20 @@ func NewExecutor(deps Dependencies) Executor {
 	return e
 }
 
+type streamContext struct {
+	bounds Bounds
+}
+
+func newStreamContext(b Bounds) streamContext {
+	return streamContext{
+		bounds: b,
+	}
+}
+
+func (ctx streamContext) Bounds() Bounds {
+	return ctx.bounds
+}
+
 type executionState struct {
 	p    *plan.PlanSpec
 	deps Dependencies
@@ -36,8 +52,6 @@ type executionState struct {
 
 	resources query.ResourceManagement
 
-	bounds Bounds
-
 	results map[string]query.Result
 	sources []Source
 
@@ -46,8 +60,8 @@ type executionState struct {
 	dispatcher *poolDispatcher
 }
 
-func (e *executor) Execute(ctx context.Context, orgID platform.ID, p *plan.PlanSpec) (map[string]query.Result, error) {
-	es, err := e.createExecutionState(ctx, orgID, p)
+func (e *executor) Execute(ctx context.Context, orgID platform.ID, p *plan.PlanSpec, a *Allocator) (map[string]query.Result, error) {
+	es, err := e.createExecutionState(ctx, orgID, p, a)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize execute state")
 	}
@@ -62,25 +76,21 @@ func validatePlan(p *plan.PlanSpec) error {
 	return nil
 }
 
-func (e *executor) createExecutionState(ctx context.Context, orgID platform.ID, p *plan.PlanSpec) (*executionState, error) {
+func (e *executor) createExecutionState(ctx context.Context, orgID platform.ID, p *plan.PlanSpec, a *Allocator) (*executionState, error) {
 	if err := validatePlan(p); err != nil {
 		return nil, errors.Wrap(err, "invalid plan")
 	}
+	// Set allocation limit
+	a.Limit = p.Resources.MemoryBytesQuota
 	es := &executionState{
-		orgID: orgID,
-		p:     p,
-		deps:  e.deps,
-		alloc: &Allocator{
-			Limit: p.Resources.MemoryBytesQuota,
-		},
+		orgID:     orgID,
+		p:         p,
+		deps:      e.deps,
+		alloc:     a,
 		resources: p.Resources,
 		results:   make(map[string]query.Result, len(p.Results)),
 		// TODO(nathanielc): Have the planner specify the dispatcher throughput
 		dispatcher: newPoolDispatcher(10),
-		bounds: Bounds{
-			Start: Time(p.Bounds.Start.Time(p.Now).UnixNano()),
-			Stop:  Time(p.Bounds.Stop.Time(p.Now).UnixNano()),
-		},
 	}
 	nodes := make(map[plan.ProcedureID]Node, len(p.Procedures))
 	for name, yield := range p.Results {
@@ -108,10 +118,16 @@ func (es *executionState) createNode(ctx context.Context, pr *plan.Procedure, no
 	if n, ok := nodes[pr.ID]; ok {
 		return n, nil
 	}
+
 	// Build execution context
 	ec := executionContext{
 		es: es,
+		streamContext: newStreamContext(Bounds{
+			Start: resolveTime(pr.Bounds.Start, es.p.Now),
+			Stop:  resolveTime(pr.Bounds.Stop, es.p.Now),
+		}),
 	}
+
 	if len(pr.Parents) > 0 {
 		ec.parents = make([]DatasetID, len(pr.Parents))
 		for i, parentID := range pr.Parents {
@@ -211,9 +227,11 @@ func (es *executionState) do(ctx context.Context) {
 	}()
 }
 
+// Need a unique stream context per execution context
 type executionContext struct {
-	es      *executionState
-	parents []DatasetID
+	es            *executionState
+	parents       []DatasetID
+	streamContext streamContext
 }
 
 // Satisfy the ExecutionContext interface
@@ -221,11 +239,16 @@ func (ec executionContext) OrganizationID() platform.ID {
 	return ec.es.orgID
 }
 
-func (ec executionContext) ResolveTime(qt query.Time) Time {
-	return Time(qt.Time(ec.es.p.Now).UnixNano())
+func resolveTime(qt query.Time, now time.Time) Time {
+	return Time(qt.Time(now).UnixNano())
 }
-func (ec executionContext) Bounds() Bounds {
-	return ec.es.bounds
+
+func (ec executionContext) ResolveTime(qt query.Time) Time {
+	return resolveTime(qt, ec.es.p.Now)
+}
+
+func (ec executionContext) StreamContext() StreamContext {
+	return ec.streamContext
 }
 
 func (ec executionContext) Allocator() *Allocator {

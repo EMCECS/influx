@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/execute/executetest"
+	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/plan"
 	"github.com/influxdata/platform/query/plan/plantest"
 	"github.com/influxdata/platform/query/querytest"
@@ -37,6 +37,9 @@ func TestCount_NewQuery(t *testing.T) {
 								Relative:   -2 * time.Hour,
 								IsRelative: true,
 							},
+							TimeCol:  "_time",
+							StartCol: "_start",
+							StopCol:  "_stop",
 						},
 					},
 					{

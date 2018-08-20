@@ -378,10 +378,11 @@ A _block_ is a possibly empty sequence of statements within matching brace brack
 
 In addition to explicit blocks in the source code, there are implicit blocks:
 
-1. The _universe block_ encompasses all Flux source text.
-2. Each package has a _package block_ containing all Flux source text for that package.
-3. Each file has a _file block_ containing all Flux source text in that file.
-4. Each function literal has its own _function block_ even if not explicitly declared.
+1. The _options block_ is the top-level block for all Flux programs. All option declarations are contained in this block.
+2. The _universe block_ encompasses all Flux source text aside from option statements. It is nested directly inside of the _options block_.
+3. Each package has a _package block_ containing all Flux source text for that package.
+4. Each file has a _file block_ containing all Flux source text in that file.
+5. Each function literal has its own _function block_ even if not explicitly declared.
 
 Blocks nest and influence scoping.
 
@@ -394,14 +395,20 @@ An identifier may change value via assignment within the same block.
 
 Flux is lexically scoped using blocks:
 
-1. The scope of a preassigned identifier is in the universe block.
-2. The scope of an identifier denoting a variable or function at the top level (outside any function) is the package block.
-3. The scope of a package name of an imported package is the file block of the file containing the import declaration.
-4. The scope of an identifier denoting a function argument is the function body.
-5. The scope of a variable assigned inside a function is the innermost containing block.
+1. The scope of an option identifier is the options block.
+2. The scope of a preassigned (non-option) identifier is in the universe block.
+3. The scope of an identifier denoting a variable or function at the top level (outside any function) is the package block.
+4. The scope of a package name of an imported package is the file block of the file containing the import declaration.
+5. The scope of an identifier denoting a function argument is the function body.
+6. The scope of a variable assigned inside a function is the innermost containing block.
 
-An identifier assigned in a block may be reassigned in an inner block.
+An identifier assigned in a block may be reassigned in an inner block with the exception of option identifiers.
 While the identifier of the inner assignment is in scope, it denotes the entity assigned by the inner assignment.
+
+Option identifiers have default assignments that are automatically defined in the _options block_.
+Because the _options block_ is the top-level block of a Flux program, options are visible/available to any and all other blocks.
+However option values may only be reassigned or overridden in the explicit block denoting the main (executable) package.
+Assignment of option identifiers in any non-executable package is strictly prohibited.
 
 The package clause is not a assignment; the package name does not appear in any scope.
 Its purpose is to identify the files belonging to the same package and to specify the default package name for import declarations.
@@ -508,8 +515,54 @@ Examples:
 
 A statement controls execution.
 
-    Statement = VarAssignment | ReturnStatement |
+    Statement = OptionStatement | VarAssignment | ReturnStatement |
                 ExpressionStatement | BlockStatment .
+
+#### Option statements
+
+Options specify a context in which a Flux query is to be run. They define variables
+that describe how to execute a Flux query. For example, the following Flux script sets
+the `task` option to schedule a query to run periodically every hour:
+
+    option task = {
+        name: "mean",
+        every: 1h,
+    }
+
+    from(db:"metrics")
+        |> range(start:-task.every)
+        |> group(by:["level"])
+        |> mean()
+        |> yield(name:"mean")
+
+All options are designed to be completely optional and have default values to be used when not specified.
+Grammatically, an option statement is just a variable assignment preceded by the "option" keyword.
+
+    OptionStatement = "option" VarAssignment
+
+Below is a list of all options that are currently implemented in the Flux language:
+
+* task
+* now
+
+##### task
+
+The `task` option is used by a scheduler to schedule the execution of a Flux query.
+
+    option task = {
+        name: "foo",        // name is required
+        every: 1h,          // task should be run at this interval
+        delay: 10m,         // delay scheduling this task by this duration
+        cron: "0 2 * * *",  // cron is a more sophisticated way to schedule. every and cron are mutually exclusive
+        retry: 5,           // number of times to retry a failed query
+    }
+
+##### now
+
+The `now` option is a function that returns a time value to be used as a proxy for the current system time.
+
+    // Query should execute as if the below time is the current system time
+    option now = () => 2006-01-02T15:04:05Z07:00
 
 #### Return statements
 
@@ -1031,6 +1084,64 @@ Range has the following properties:
     Specifies the exclusive newest time to be included in the results.
     Defaults to "now"
 
+#### Rename 
+
+Rename will rename specified columns in a table. 
+There are two variants: one which takes a map of old column names to new column names,
+and one which takes a mapping function. 
+If a column is renamed and is part of the group key, the column name in the group key will be updated.
+
+Rename has the following properties: 
+* `columns` object
+	A map of columns to rename and their corresponding new names. Cannot be used with `fn`. 
+* `fn` function 
+    A function which takes a single string parameter (the old column name) and returns a string representing 
+    the new column name. Cannot be used with `columns`.
+
+Example usage:
+
+Rename a single column: `rename(columns:{host: "server"})`
+
+Rename all columns with `fn` parameter: `rename(fn: (col) => "{col}_new")`
+
+#### Drop 
+
+Drop will exclude specified columns from a table. Columns to exclude can be specified either through a 
+list, or a predicate function. 
+When a dropped column is part of the group key it will also be dropped from the key.
+
+Drop has the following properties:
+* `columns` array of strings 
+    An array of columns which should be excluded from the resulting table. Cannot be used with `fn`.
+* `fn` function 
+    A function which takes a column name as a parameter and returns a boolean indicating whether
+    or not the column should be excluded from the resulting table. Cannot be used with `columns`.  
+
+Example Usage:
+
+Drop a list of columns: `drop(columns: ["host", "_measurement"])`
+
+Drop all columns matching a predicate: `drop(fn: (col) => col =~ /usage*/)`
+
+#### Keep 
+
+Keep is the inverse of drop. It will return a table containing only columns that are specified,
+ignoring all others. 
+Only columns in the group key that are also specified in `keep` will be kept in the resulting group key.
+
+Keep has the following properties: 
+* `columns` array of strings
+    An array of columns that should be included in the resulting table. Cannot be used with `fn`.
+* `fn` function
+    A function which takes a column name as a parameter and returns a boolean indicating whether or not
+    the column should be included in the resulting table. Cannot be used with `columns`. 
+
+Example Usage:
+
+Keep a list of columns: `keep(columns: ["_time", "_value"])`
+
+Keep all columns matching a predicate: `keep(fn: (col) => col =~ /inodes*/)`
+
 
 #### Set
 
@@ -1120,24 +1231,111 @@ Window has the following properties:
 
 #### Join
 
-Join merges two or more input streams into a single output stream.
-Input tables are matched on their group keys and then each of their records are joined into a single output table.
-The output table group key will be the same as the input table.
+Join merges two or more input streams, whose values are equal on a set of common columns, into a single output stream.
+The resulting schema is the union of the input schemas, and the resulting group key is the union of the input group keys.
 
-The join operation compares values based on equality.
+For example, given the following two streams of data:
 
-Join has the following properties:
+* SF_Temperature
 
-* `tables` map of tables
-    Map of tables to join. Currently only two tables are allowed.
-* `on` array of strings
-    List of columns on which to join the tables.
-* `fn`
-    Defines the function that merges the values of the tables.
-    The function must defined to accept a single parameter.
-    The parameter is an object where the value of each key is a corresponding record from the input streams.
-    The return value must be an object which defines the output record structure.
+    | _time | _field | _value |
+    | ----- | ------ | ------ |
+    | 0001  | "temp" | 70 |
+    | 0002  | "temp" | 75 |
+    | 0003  | "temp" | 72 |
 
+* NY_Temperature
+
+    | _time | _field | _value |
+    | ----- | ------ | ------ |
+    | 0001  | "temp" | 55 |
+    | 0002  | "temp" | 56 |
+    | 0003  | "temp" | 55 |
+
+And the following join query: `join(tables: {sf: SF_Temperature, ny: NY_Temperature}, on: ["_time", "_field"])`
+
+The output will be:
+
+| _time | _field | ny__value | sf__value |
+| ----- | ------ |---------- | --------- |
+| 0001  | "temp" | 55 | 70 |
+| 0002  | "temp" | 56 | 75 |
+| 0003  | "temp" | 55 | 72 |
+
+
+##### options
+
+The join operator accepts the following named parameters:
+
+| Name | Type | Required | Default Value | Possible Values |
+| ---- | ---- | -------- | ------- | ------ |
+| tables    | map           | yes   | no default value - must be specified with every call | N/A |
+| on        | string array  | no    | list of columns to join on | N/A |
+| method    | string        | no    | inner | inner, cross, left, right, or outer |
+
+* tables
+
+    Map of tables (or streams) to join together. It is the one required parameter of the join.
+
+* on
+
+    An optional parameter for specifying a list of columns to join on.
+    Defaults to the set of columns that are common to all of the input streams.
+
+* method
+
+    An optional parameter that specifies the type of join to be performed.
+    When not specified, an inner join is performed.
+    The **method** parameter may take on any one of the following values:
+
+    * inner - inner join
+
+    * cross - cross product
+
+    * left - left outer join
+
+    * right - right outer join
+
+    * outer - full outer join
+
+The **on** parameter and the **cross** method are mutually exclusive.
+
+
+##### output schema
+
+The column schema of the output stream is the union of the input schemas, and the same goes for the output group key.
+Columns that must be renamed due to ambiguity (i.e. columns that occur in more than one input stream) are renamed
+according to the template `<table>_<column>`.
+
+Examples:
+
+* SF_Temperature
+* Group Key {"_field"}
+
+    | _time | _field | _value |
+    | ----- | ------ | ------ |
+    | 0001  | "temp" | 70 |
+    | 0002  | "temp" | 75 |
+    | 0003  | "temp" | 72 |
+
+* NY_Temperature
+* Group Key {"_time", "_field"}
+
+    | _time | _field | _value |
+    | ----- | ------ | ------ |
+    | 0001  | "temp" | 55 |
+    | 0002  | "temp" | 56 |
+    | 0003  | "temp" | 55 |
+
+`join(tables: {sf: SF_Temperature, ny: NY_Temperature}, on: ["_time"])` produces:
+
+* Group Key {"_time", "sf__field", "ny__field"}
+
+    | _time | sf__field | sf__value | ny__field | ny__value |
+    | ----- | ------ | ---------- | -------- |--------- |
+    | 0001  | "temp" | 70 | "temp" | 55 |
+    | 0002  | "temp" | 75 | "temp" | 56 |
+    | 0003  | "temp" | 72 | "temp: | 55 |
 
 
 #### Cumulative sum

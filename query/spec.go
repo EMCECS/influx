@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -11,6 +12,7 @@ type Spec struct {
 	Operations []*Operation       `json:"operations"`
 	Edges      []Edge             `json:"edges"`
 	Resources  ResourceManagement `json:"resources"`
+	Now        time.Time          `json:"now"`
 
 	sorted   []*Operation
 	children map[OperationID][]*Operation
@@ -43,6 +45,9 @@ func (q *Spec) Walk(f func(o *Operation) error) error {
 
 // Validate ensures the query is a valid DAG.
 func (q *Spec) Validate() error {
+	if q.Now.IsZero() {
+		return errors.New("now time must be set")
+	}
 	return q.prepare()
 }
 

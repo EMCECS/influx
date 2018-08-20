@@ -15,14 +15,16 @@ type Task struct {
 	Last         Run    `json:"last,omitempty"`
 }
 
-// Run is a record created when a run of a task is queued.
+// Run is a record created when a run of a task is scheduled.
 type Run struct {
-	ID        ID     `json:"id,omitempty"`
-	Status    string `json:"status"`
-	QueuedAt  string `json:"queuedAt"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
-	Log       Log    `json:"log"`
+	ID           ID     `json:"id,omitempty"`
+	TaskID       ID     `json:"taskId"`
+	Status       string `json:"status"`
+	ScheduledFor string `json:"scheduledFor"`
+	StartedAt    string `json:"startedAt,omitempty"`
+	FinishedAt   string `json:"finishedAt,omitempty"`
+	RequestedAt  string `json:"requestedAt,omitempty"`
+	Log          Log    `json:"log"`
 }
 
 // Log represents a link to a log resource
@@ -61,7 +63,8 @@ type TaskService interface {
 
 // TaskUpdate represents updates to a task
 type TaskUpdate struct {
-	Flux *string `json:"flux"`
+	Flux   *string `json:"flux,omitempty"`
+	Status *string `json:"status,omitempty"`
 }
 
 // TaskFilter represents a set of filters that restrict the returned results

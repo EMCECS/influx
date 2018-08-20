@@ -1,21 +1,46 @@
 package functions_test
 
 import (
+	"bytes"
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/mock"
 	"github.com/influxdata/platform/query"
 	_ "github.com/influxdata/platform/query/builtin"
 	"github.com/influxdata/platform/query/csv"
 	"github.com/influxdata/platform/query/influxql"
 	"github.com/influxdata/platform/query/querytest"
-	"github.com/pkg/errors"
 
 	"github.com/andreyvit/diff"
 )
+
+var dbrpMappingSvc = mock.NewDBRPMappingService()
+
+func init() {
+	mapping := platform.DBRPMapping{
+		Cluster:         "cluster",
+		Database:        "db0",
+		RetentionPolicy: "autogen",
+		Default:         true,
+		OrganizationID:  platform.ID("org"),
+		BucketID:        platform.ID("bucket"),
+	}
+	dbrpMappingSvc.FindByFn = func(ctx context.Context, cluster string, db string, rp string) (*platform.DBRPMapping, error) {
+		return &mapping, nil
+	}
+	dbrpMappingSvc.FindFn = func(ctx context.Context, filter platform.DBRPMappingFilter) (*platform.DBRPMapping, error) {
+		return &mapping, nil
+	}
+	dbrpMappingSvc.FindManyFn = func(ctx context.Context, filter platform.DBRPMappingFilter, opt ...platform.FindOptions) ([]*platform.DBRPMapping, int, error) {
+		return []*platform.DBRPMapping{&mapping}, 1, nil
+	}
+}
 
 var skipTests = map[string]string{
 	"derivative":                "derivative not supported by influxql (https://github.com/influxdata/platform/issues/93)",
@@ -25,13 +50,17 @@ var skipTests = map[string]string{
 	"null_as_value":             "null not supported as value in influxql (https://github.com/influxdata/platform/issues/353)",
 	"difference_panic":          "difference() panics when no table is supplied",
 	"string_interp":             "string interpolation not working as expected in flux (https://github.com/influxdata/platform/issues/404)",
+	// TODO(adamperlin): remove these skips and add expected error handling to the test framework
+	// Expected query errors:
+	"drop_after_rename":   `failed to run query: drop error: column "old" doesn't exist`,
+	"drop_before_rename":  `failed to run query: rename error: column "old" doesn't exist`,
+	"drop_newname_before": `failed to run query: drop error: column "new" doesn't exist`,
+	"drop_referenced":     `failed to run query: function references unknown column "_field"`,
 }
 
-func Test_QueryEndToEnd(t *testing.T) {
-	qs := querytest.GetQueryServiceBridge()
+var pqs = querytest.GetProxyQueryServiceBridge()
 
-	influxqlTranspiler := influxql.NewTranspiler()
-
+func withEachFluxFile(t testing.TB, fn func(prefix, caseName string)) {
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -46,100 +75,148 @@ func Test_QueryEndToEnd(t *testing.T) {
 	for _, fluxFile := range fluxFiles {
 		ext := filepath.Ext(fluxFile)
 		prefix := fluxFile[0 : len(fluxFile)-len(ext)]
-
 		_, caseName := filepath.Split(prefix)
-		if reason, ok := skipTests[caseName]; ok {
-			t.Run(caseName, func(t *testing.T) {
-				t.Skip(reason)
-			})
-			continue
-		}
+		fn(prefix, caseName)
+	}
+}
+
+func Test_QueryEndToEnd(t *testing.T) {
+	withEachFluxFile(t, func(prefix, caseName string) {
+		reason, skip := skipTests[caseName]
 
 		fluxName := caseName + ".flux"
 		influxqlName := caseName + ".influxql"
 		t.Run(fluxName, func(t *testing.T) {
-			err := queryTester(t, qs, prefix, ".flux")
-			if err != nil {
-				qs = querytest.GetQueryServiceBridge()
+			if skip {
+				t.Skip(reason)
 			}
+			testFlux(t, pqs, prefix, ".flux")
 		})
 		t.Run(influxqlName, func(t *testing.T) {
-			err := queryTranspileTester(t, influxqlTranspiler, qs, prefix, ".influxql")
-			if err != nil {
-				qs = querytest.GetQueryServiceBridge()
+			if skip {
+				t.Skip(reason)
+			}
+			testInfluxQL(t, pqs, prefix, ".influxql")
+		})
+	})
+}
+
+func Benchmark_QueryEndToEnd(b *testing.B) {
+	withEachFluxFile(b, func(prefix, caseName string) {
+		reason, skip := skipTests[caseName]
+		if skip {
+			b.Skip(reason)
+		}
+
+		fluxName := caseName + ".flux"
+		influxqlName := caseName + ".influxql"
+		b.Run(fluxName, func(b *testing.B) {
+			if skip {
+				b.Skip(reason)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				testFlux(b, pqs, prefix, ".flux")
 			}
 		})
-	}
+		b.Run(influxqlName, func(b *testing.B) {
+			if skip {
+				b.Skip(reason)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				testInfluxQL(b, pqs, prefix, ".influxql")
+			}
+		})
+	})
 }
 
-func queryTester(t *testing.T, qs query.QueryService, prefix, queryExt string) error {
-	q, err := querytest.GetTestData(prefix, queryExt)
+func testFlux(t testing.TB, pqs query.ProxyQueryService, prefix, queryExt string) {
+	q, err := ioutil.ReadFile(prefix + queryExt)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	csvOut, err := querytest.GetTestData(prefix, ".out.csv")
+	csvInFilename := prefix + ".in.csv"
+	csvOut, err := ioutil.ReadFile(prefix + ".out.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	spec, err := query.Compile(context.Background(), q)
-	if err != nil {
-		t.Fatalf("failed to compile: %v", err)
+	compiler := query.FluxCompiler{
+		Query: string(q),
+	}
+	req := &query.ProxyRequest{
+		Request: query.Request{
+			Compiler: querytest.FromCSVCompiler{
+				Compiler:  compiler,
+				InputFile: csvInFilename,
+			},
+		},
+		Dialect: csv.DefaultDialect(),
 	}
 
-	csvIn := prefix + ".in.csv"
-	enc := csv.NewMultiResultEncoder(csv.DefaultEncoderConfig())
-
-	return QueryTestCheckSpec(t, qs, spec, csvIn, csvOut, enc)
+	QueryTestCheckSpec(t, pqs, req, string(csvOut))
 }
 
-func queryTranspileTester(t *testing.T, transpiler query.Transpiler, qs query.QueryService, prefix, queryExt string) error {
-	q, err := querytest.GetTestData(prefix, queryExt)
+func testInfluxQL(t testing.TB, pqs query.ProxyQueryService, prefix, queryExt string) {
+	q, err := ioutil.ReadFile(prefix + queryExt)
 	if err != nil {
-		if os.IsNotExist(err) {
-			t.Skip("query missing")
-		} else {
+		if !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
+		t.Skip("influxql query is missing")
 	}
 
-	csvOut, err := querytest.GetTestData(prefix, ".out.csv")
+	csvInFilename := prefix + ".in.csv"
+	csvOut, err := ioutil.ReadFile(prefix + ".out.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	spec, err := transpiler.Transpile(context.Background(), q)
-	if err != nil {
-		t.Fatalf("failed to transpile: %v", err)
+	compiler := influxql.NewCompiler(dbrpMappingSvc)
+	compiler.Cluster = "cluster"
+	compiler.DB = "db0"
+	compiler.Query = string(q)
+	req := &query.ProxyRequest{
+		Request: query.Request{
+			Compiler: querytest.FromCSVCompiler{
+				Compiler:  compiler,
+				InputFile: csvInFilename,
+			},
+		},
+		Dialect: csv.DefaultDialect(),
 	}
+	QueryTestCheckSpec(t, pqs, req, string(csvOut))
 
-	csvIn := prefix + ".in.csv"
-	enc := csv.NewMultiResultEncoder(csv.DefaultEncoderConfig())
-	QueryTestCheckSpec(t, qs, spec, csvIn, csvOut, enc)
+	// Rerun test for InfluxQL JSON dialect
+	req.Dialect = new(influxql.Dialect)
 
-	enc = influxql.NewMultiResultEncoder()
-	jsonOut, err := querytest.GetTestData(prefix, ".out.json")
+	jsonOut, err := ioutil.ReadFile(prefix + ".out.json")
 	if err != nil {
-		t.Logf("skipping json evaluation: %s", err)
-		return nil
+		if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		t.Skip("influxql expected json is missing")
 	}
-	return QueryTestCheckSpec(t, qs, spec, csvIn, jsonOut, enc)
+	QueryTestCheckSpec(t, pqs, req, string(jsonOut))
 }
 
-func QueryTestCheckSpec(t *testing.T, qs query.QueryService, spec *query.Spec, inputFile, want string, enc query.MultiResultEncoder) error {
+func QueryTestCheckSpec(t testing.TB, pqs query.ProxyQueryService, req *query.ProxyRequest, want string) {
 	t.Helper()
 
-	querytest.ReplaceFromSpec(spec, inputFile)
-
-	got, err := querytest.GetQueryEncodedResults(qs, spec, inputFile, enc)
+	var buf bytes.Buffer
+	_, err := pqs.Query(context.Background(), &buf, req)
 	if err != nil {
 		t.Errorf("failed to run query: %v", err)
-		return errors.New("Error running query")
+		return
 	}
+
+	got := buf.String()
 
 	if g, w := strings.TrimSpace(got), strings.TrimSpace(want); g != w {
 		t.Errorf("result not as expected want(-) got (+):\n%v", diff.LineDiff(w, g))
 	}
-	return nil
 }

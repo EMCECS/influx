@@ -3,7 +3,7 @@ jobs:
   build:
     docker:
       # specify the version
-      - image: circleci/golang:1.10.2
+      - image: circleci/golang:1.10.3-node-browsers
 
     working_directory: /go/src/github.com/influxdata/platform
     steps:
@@ -17,11 +17,14 @@ jobs:
 
   deploy:
     docker:
-      - image: circleci/golang:1.10.2
+      - image: circleci/golang:1.10.3-node-browsers
     working_directory: /go/src/github.com/influxdata/platform
     steps:
       - checkout
-      - run: make nightly
+      - setup_remote_docker
+      - run: |
+          docker login -u "$QUAY_USER" -p $QUAY_PASS quay.io
+          make nightly
 
 
 workflows:

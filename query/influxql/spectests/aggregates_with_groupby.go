@@ -7,6 +7,7 @@ import (
 	"github.com/influxdata/influxql"
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/ast"
+	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/semantic"
 )
@@ -20,14 +21,17 @@ func init() {
 						{
 							ID: "from0",
 							Spec: &functions.FromOpSpec{
-								Bucket: "db0/autogen",
+								BucketID: bucketID,
 							},
 						},
 						{
 							ID: "range0",
 							Spec: &functions.RangeOpSpec{
-								Start: query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-								Stop:  query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+								Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
+								Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+								TimeCol:  execute.DefaultTimeColLabel,
+								StartCol: execute.DefaultStartColLabel,
+								StopCol:  execute.DefaultStopColLabel,
 							},
 						},
 						{
@@ -70,7 +74,7 @@ func init() {
 						{
 							ID: "group0",
 							Spec: &functions.GroupOpSpec{
-								By: []string{"_measurement", "host"},
+								By: []string{"_measurement", "_start", "host"},
 							},
 						},
 						&aggregate,
@@ -122,6 +126,7 @@ func init() {
 						{Parent: aggregate.ID, Child: "map0"},
 						{Parent: "map0", Child: "yield0"},
 					},
+					Now: Now(),
 				}
 		}),
 	)

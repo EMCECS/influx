@@ -20,14 +20,17 @@ func init() {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Bucket: "db0/autogen",
+							BucketID: bucketID,
 						},
 					},
 					{
 						ID: "range0",
 						Spec: &functions.RangeOpSpec{
-							Start: query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-							Stop:  query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+							Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
+							Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+							TimeCol:  execute.DefaultTimeColLabel,
+							StartCol: execute.DefaultStartColLabel,
+							StopCol:  execute.DefaultStopColLabel,
 						},
 					},
 					{
@@ -70,7 +73,7 @@ func init() {
 					{
 						ID: "group0",
 						Spec: &functions.GroupOpSpec{
-							By: []string{"_measurement"},
+							By: []string{"_measurement", "_start"},
 						},
 					},
 					{
@@ -86,14 +89,17 @@ func init() {
 					{
 						ID: "from1",
 						Spec: &functions.FromOpSpec{
-							Bucket: "db0/autogen",
+							BucketID: bucketID,
 						},
 					},
 					{
 						ID: "range1",
 						Spec: &functions.RangeOpSpec{
-							Start: query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-							Stop:  query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+							Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
+							Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+							TimeCol:  execute.DefaultTimeColLabel,
+							StartCol: execute.DefaultStartColLabel,
+							StopCol:  execute.DefaultStopColLabel,
 						},
 					},
 					{
@@ -136,7 +142,7 @@ func init() {
 					{
 						ID: "group1",
 						Spec: &functions.GroupOpSpec{
-							By: []string{"_measurement"},
+							By: []string{"_measurement", "_start"},
 						},
 					},
 					{
@@ -151,33 +157,6 @@ func init() {
 						ID: "join0",
 						Spec: &functions.JoinOpSpec{
 							On: []string{"_measurement"},
-							Fn: &semantic.FunctionExpression{
-								Params: []*semantic.FunctionParam{{
-									Key: &semantic.Identifier{Name: "tables"},
-								}},
-								Body: &semantic.ObjectExpression{
-									Properties: []*semantic.Property{
-										{
-											Key: &semantic.Identifier{Name: "val0"},
-											Value: &semantic.MemberExpression{
-												Object: &semantic.IdentifierExpression{
-													Name: "tables",
-												},
-												Property: "t0",
-											},
-										},
-										{
-											Key: &semantic.Identifier{Name: "val1"},
-											Value: &semantic.MemberExpression{
-												Object: &semantic.IdentifierExpression{
-													Name: "tables",
-												},
-												Property: "t1",
-											},
-										},
-									},
-								},
-							},
 							TableNames: map[query.OperationID]string{
 								"mean0": "t0",
 								"max0":  "t1",
@@ -247,6 +226,7 @@ func init() {
 					{Parent: "join0", Child: "map0"},
 					{Parent: "map0", Child: "yield0"},
 				},
+				Now: Now(),
 			},
 		),
 	)

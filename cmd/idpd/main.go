@@ -7,6 +7,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -15,8 +16,18 @@ import (
 	influxlogger "github.com/influxdata/influxdb/logger"
 	"github.com/influxdata/platform"
 	"github.com/influxdata/platform/bolt"
+	"github.com/influxdata/platform/chronograf/server"
 	"github.com/influxdata/platform/http"
 	"github.com/influxdata/platform/kit/prom"
+	"github.com/influxdata/platform/query"
+	_ "github.com/influxdata/platform/query/builtin"
+	"github.com/influxdata/platform/query/control"
+	"github.com/influxdata/platform/query/execute"
+	"github.com/influxdata/platform/task"
+	taskbackend "github.com/influxdata/platform/task/backend"
+	taskbolt "github.com/influxdata/platform/task/backend/bolt"
+	"github.com/influxdata/platform/task/backend/coordinator"
+	taskexecutor "github.com/influxdata/platform/task/backend/executor"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -102,6 +113,48 @@ func platformF(cmd *cobra.Command, args []string) {
 		dashboardSvc = c
 	}
 
+	var sourceSvc platform.SourceService
+	{
+		sourceSvc = c
+	}
+
+	var queryService query.QueryService
+	{
+		// TODO(lh): this is temporary until query endpoint is added here.
+		config := control.Config{
+			ExecutorDependencies: make(execute.Dependencies),
+			ConcurrencyQuota:     runtime.NumCPU() * 2,
+			MemoryBytesQuota:     0,
+			Verbose:              false,
+		}
+
+		queryService = query.QueryServiceBridge{
+			AsyncQueryService: control.New(config),
+		}
+	}
+
+	var taskSvc platform.TaskService
+	{
+		boltStore, err := taskbolt.New(c.DB(), "tasks")
+		if err != nil {
+			logger.Fatal("failed opening task bolt", zap.Error(err))
+		}
+
+		executor := taskexecutor.NewQueryServiceExecutor(logger, queryService, boltStore)
+
+		// TODO(lh): Replace NopLogWriter with real log writer
+		scheduler := taskbackend.NewScheduler(boltStore, executor, taskbackend.NopLogWriter{}, time.Now().UTC().Unix())
+
+		// TODO(lh): Replace NopLogReader with real log reader
+		taskSvc = task.PlatformAdapter(coordinator.New(scheduler, boltStore), taskbackend.NopLogReader{})
+	}
+
+	chronografSvc, err := server.NewServiceV2(context.TODO(), c.DB())
+	if err != nil {
+		logger.Error("failed creating chronograf service", zap.Error(err))
+		os.Exit(1)
+	}
+
 	errc := make(chan error)
 
 	sigs := make(chan os.Signal, 1)
@@ -129,12 +182,29 @@ func platformF(cmd *cobra.Command, args []string) {
 		authHandler.AuthorizationService = authSvc
 		authHandler.Logger = logger.With(zap.String("handler", "auth"))
 
+		assetHandler := http.NewAssetHandler()
+		fluxLangHandler := http.NewFluxLangHandler()
+
+		sourceHandler := http.NewSourceHandler()
+		sourceHandler.SourceService = sourceSvc
+
+		taskHandler := http.NewTaskHandler()
+		taskHandler.TaskService = taskSvc
+
+		// TODO(desa): what to do about idpe.
+		chronografHandler := http.NewChronografHandler(chronografSvc)
+
 		platformHandler := &http.PlatformHandler{
 			BucketHandler:        bucketHandler,
 			OrgHandler:           orgHandler,
 			UserHandler:          userHandler,
 			AuthorizationHandler: authHandler,
 			DashboardHandler:     dashboardHandler,
+			AssetHandler:         assetHandler,
+			FluxLangHandler:      fluxLangHandler,
+			ChronografHandler:    chronografHandler,
+			SourceHandler:        sourceHandler,
+			TaskHandler:          taskHandler,
 		}
 		reg.MustRegister(platformHandler.PrometheusCollectors()...)
 

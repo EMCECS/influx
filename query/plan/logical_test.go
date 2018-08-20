@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/plan"
 	"github.com/influxdata/platform/query/plan/plantest"
 )
@@ -59,6 +59,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 							Bounds: plan.BoundsSpec{
 								Start: query.Time{Relative: -1 * time.Hour},
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("0"),
@@ -99,6 +100,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 							Bounds: plan.BoundsSpec{
 								Start: query.Time{Relative: -1 * time.Hour},
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("select0"),
@@ -127,6 +129,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 							Bounds: plan.BoundsSpec{
 								Start: query.Time{Relative: -1 * time.Hour},
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("select1"),
@@ -171,6 +174,10 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 	for i, tc := range testCases {
 		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			// Set Now time on query spec
+			tc.q.Now = time.Now().UTC()
+			tc.ap.Now = tc.q.Now
+
 			planner := plan.NewLogicalPlanner()
 			got, err := planner.Plan(tc.q)
 			if err != nil {

@@ -11,14 +11,18 @@
 #    * All recursive Makefiles must support the targets: all and clean.
 #
 
-SUBDIRS := query
+SUBDIRS := query task
+GOBINDATA := $(shell go list -f {{.Root}}  github.com/kevinburke/go-bindata 2> /dev/null)
+UISOURCES := $(shell find chronograf/ui -type f -not \( -path chronograf/ui/build/\* -o -path chronograf/ui/node_modules/\* -prune \) )
+YARN := $(shell command -v yarn 2> /dev/null)
+
 
 GO_ARGS=-tags '$(GO_TAGS)'
 
 # Test vars can be used by all recursive Makefiles
 export GOOS=$(shell go env GOOS)
 export GO_BUILD=go build $(GO_ARGS)
-export GO_TEST=go test $(GO_ARGS)
+export GO_TEST=go test -count=1 $(GO_ARGS)
 export GO_GENERATE=go generate $(GO_ARGS)
 export GO_VET= go vet $(GO_ARGS)
 
@@ -33,20 +37,20 @@ SOURCES_NO_VENDOR := $(shell find . -path ./vendor -prune -o -name "*.go" -not -
 CMDS := \
 	bin/$(GOOS)/influx \
 	bin/$(GOOS)/idpd \
-	bin/$(GOOS)/fluxd \
-	bin/$(GOOS)/transpilerd
+	bin/$(GOOS)/fluxd
 
 # List of utilities to build as part of the build process
 UTILS := \
 	bin/$(GOOS)/pigeon \
 	bin/$(GOOS)/cmpgen \
+	bin/$(GOOS)/protoc-gen-gogofaster \
 	bin/$(GOOS)/goreleaser
 
 # Default target to build all commands.
 #
 # This target setups the dependencies to correctly build all commands.
 # Other targets must depend on this target to correctly builds CMDS.
-all: Gopkg.lock $(UTILS) subdirs $(CMDS)
+all: dep generate Gopkg.lock $(UTILS) subdirs $(CMDS)
 
 # Target to build subdirs.
 # Each subdirs must support the `all` target.
@@ -69,8 +73,28 @@ bin/$(GOOS)/pigeon: ./vendor/github.com/mna/pigeon/main.go
 bin/$(GOOS)/cmpgen: ./query/ast/asttest/cmpgen/main.go
 	go build -i -o $@ ./query/ast/asttest/cmpgen
 
+bin/$(GOOS)/protoc-gen-gogofaster: vendor $(call go_deps,./vendor/github.com/gogo/protobuf/protoc-gen-gogofaster)
+	$(GO_BUILD) -i -o $@ ./vendor/github.com/gogo/protobuf/protoc-gen-gogofaster
+
 bin/$(GOOS)/goreleaser: ./vendor/github.com/goreleaser/goreleaser/main.go
 	go build -i -o $@ ./vendor/github.com/goreleaser/goreleaser
+
+dep: .jsdep .godep
+
+.godep:
+ifndef GOBINDATA
+	@echo "Installing go-bindata"
+	go get -u github.com/kevinburke/go-bindata/...
+endif
+	@touch .godep
+
+.jsdep: chronograf/ui/yarn.lock
+ifndef YARN
+	$(error Please install yarn 0.19.1+)
+else
+	mkdir -p chronograf/ui/build && cd chronograf/ui && yarn --no-progress --no-emoji
+	@touch .jsdep
+endif
 
 #
 # Define how source dependencies are managed
@@ -93,7 +117,16 @@ vendor/github.com/goreleaser/goreleaser/main.go: Gopkg.lock
 fmt: $(SOURCES_NO_VENDOR)
 	goimports -w $^
 
-test: all
+generate:
+	# TODO: re-enable these after we decide on a strategy for building without running `go generate`.
+	# $(GO_GENERATE) ./chronograf/dist/...
+	# $(GO_GENERATE) ./chronograf/server/...
+	# $(GO_GENERATE) ./chronograf/canned/...
+
+jstest:
+	cd chronograf/ui && yarn test --runInBand
+
+test: all jstest
 	$(GO_TEST) ./...
 
 test-race: all
@@ -107,6 +140,7 @@ bench: all
 
 nightly: bin/$(GOOS)/goreleaser all
 	PATH=./bin/$(GOOS):${PATH} goreleaser --snapshot --rm-dist
+	docker push quay.io/influxdb/flux:nightly
 
 # Recursively clean all subdirs
 clean: $(SUBDIRS)

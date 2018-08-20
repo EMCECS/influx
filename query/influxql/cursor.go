@@ -53,7 +53,7 @@ func createVarRefCursor(t *transpilerState, ref *influxql.VarRef) (cursor, error
 		return nil, err
 	}
 
-	valuer := influxql.NowValuer{Now: t.now}
+	valuer := influxql.NowValuer{Now: t.spec.Now}
 	_, tr, err := influxql.ConditionExpr(t.stmt.Condition, &valuer)
 	if err != nil {
 		return nil, err
@@ -63,13 +63,16 @@ func createVarRefCursor(t *transpilerState, ref *influxql.VarRef) (cursor, error
 	// the end time will be set to now.
 	if tr.Max.IsZero() {
 		if window, err := t.stmt.GroupByInterval(); err == nil && window > 0 {
-			tr.Max = t.now
+			tr.Max = t.spec.Now
 		}
 	}
 
 	range_ := t.op("range", &functions.RangeOpSpec{
-		Start: query.Time{Absolute: tr.MinTime()},
-		Stop:  query.Time{Absolute: tr.MaxTime()},
+		Start:    query.Time{Absolute: tr.MinTime()},
+		Stop:     query.Time{Absolute: tr.MaxTime()},
+		TimeCol:  execute.DefaultTimeColLabel,
+		StartCol: execute.DefaultStartColLabel,
+		StopCol:  execute.DefaultStopColLabel,
 	}, from)
 
 	id := t.op("filter", &functions.FilterOpSpec{

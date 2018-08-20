@@ -59,14 +59,17 @@ func init() {
 						{
 							ID: "from0",
 							Spec: &functions.FromOpSpec{
-								Bucket: "db0/autogen",
+								BucketID: bucketID,
 							},
 						},
 						{
 							ID: "range0",
 							Spec: &functions.RangeOpSpec{
-								Start: query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-								Stop:  query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+								Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
+								Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+								TimeCol:  execute.DefaultTimeColLabel,
+								StartCol: execute.DefaultStartColLabel,
+								StopCol:  execute.DefaultStopColLabel,
 							},
 						},
 						{
@@ -109,7 +112,7 @@ func init() {
 						{
 							ID: "group0",
 							Spec: &functions.GroupOpSpec{
-								By: []string{"_measurement"},
+								By: []string{"_measurement", "_start"},
 							},
 						},
 						&selector,
@@ -161,6 +164,7 @@ func init() {
 						{Parent: selector.ID, Child: "map0"},
 						{Parent: "map0", Child: "yield0"},
 					},
+					Now: Now(),
 				}
 		}),
 	)

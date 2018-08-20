@@ -1,3 +1,23 @@
+// Package control controls which resources a query may consume.
+//
+// The Controller manages the resources available to each query and ensures
+// an optimal use of those resources to execute queries in a timely manner.
+// The controller also maintains the state of a query as it goes through the
+// various stages of execution and is responsible for killing currently
+// executing queries when requested by the user.
+//
+// The Controller manages when a query is executed. This can be based on
+// anything within the query's requested resources. For example, a basic
+// implementation of the Controller may decide to execute anything with a high
+// priority before anything with a low priority.  The implementation of the
+// Controller will vary and change over time and this package may provide
+// multiple implementations for different controller algorithms.
+//
+// During execution, the Controller manages the resources used by the query and
+// provides observabiility into what resources are being used and by which
+// queries. The Controller also imposes limitations so a query that uses more
+// than its allocated resources or more resources than available on the system
+// will be aborted.
 package control
 
 import (
@@ -68,56 +88,63 @@ func New(c Config) *Controller {
 	return ctrl
 }
 
-// QueryWithCompile submits a query for execution returning immediately.
-// The query will first be compiled before submitting for execution.
+// Query submits a query for execution returning immediately.
 // Done must be called on any returned Query objects.
-func (c *Controller) QueryWithCompile(ctx context.Context, orgID platform.ID, queryStr string) (query.Query, error) {
-	q := c.createQuery(ctx, orgID)
-	err := c.compileQuery(q, queryStr)
-	if err != nil {
+func (c *Controller) Query(ctx context.Context, req *query.Request) (query.Query, error) {
+	q := c.createQuery(ctx, req.OrganizationID)
+	if err := c.compileQuery(q, req.Compiler); err != nil {
+		q.parentSpan.Finish()
 		return nil, err
 	}
-	err = c.enqueueQuery(q)
-	return q, err
-}
-
-// Query submits a query for execution returning immediately.
-// The spec must not be modified while the query is still active.
-// Done must be called on any returned Query objects.
-func (c *Controller) Query(ctx context.Context, orgID platform.ID, qSpec *query.Spec) (query.Query, error) {
-	q := c.createQuery(ctx, orgID)
-	q.spec = *qSpec
-	err := c.enqueueQuery(q)
-	return q, err
+	if err := c.enqueueQuery(q); err != nil {
+		q.parentSpan.Finish()
+		return nil, err
+	}
+	return q, nil
 }
 
 func (c *Controller) createQuery(ctx context.Context, orgID platform.ID) *Query {
 	id := c.nextID()
+	labelValues := []string{
+		orgID.String(),
+	}
 	cctx, cancel := context.WithCancel(ctx)
+	parentSpan, parentCtx := StartSpanFromContext(
+		cctx,
+		"all",
+		c.metrics.allDur.WithLabelValues(labelValues...),
+		c.metrics.all.WithLabelValues(labelValues...),
+	)
 	ready := make(chan map[string]query.Result, 1)
 	return &Query{
-		id:    id,
-		orgID: orgID,
-		labelValues: []string{
-			orgID.String(),
-		},
-		state:     Created,
-		c:         c,
-		now:       time.Now().UTC(),
-		ready:     ready,
-		parentCtx: cctx,
-		cancel:    cancel,
+		id:          id,
+		orgID:       orgID,
+		labelValues: labelValues,
+		state:       Created,
+		c:           c,
+		now:         time.Now().UTC(),
+		ready:       ready,
+		parentCtx:   parentCtx,
+		parentSpan:  parentSpan,
+		cancel:      cancel,
 	}
 }
 
-func (c *Controller) compileQuery(q *Query, queryStr string) error {
+func (c *Controller) compileQuery(q *Query, compiler query.Compiler) error {
 	if !q.tryCompile() {
 		return errors.New("failed to transition query to compiling state")
 	}
-	spec, err := query.Compile(q.compilingCtx, queryStr, query.Verbose(c.verbose))
+	spec, err := compiler.Compile(q.compilingCtx)
 	if err != nil {
 		return errors.Wrap(err, "failed to compile query")
 	}
+
+	// Incoming query spec may have been produced by an entity other than the
+	// Flux interpreter, so we must set the default Now time if not already set.
+	if spec.Now.IsZero() {
+		spec.Now = q.now
+	}
+
 	q.spec = *spec
 	return nil
 }
@@ -130,11 +157,17 @@ func (c *Controller) enqueueQuery(q *Query) error {
 		return errors.New("failed to transition query to queueing state")
 	}
 	if err := q.spec.Validate(); err != nil {
+		q.queueSpan.Finish()
 		return errors.Wrap(err, "invalid query")
 	}
 	// Add query to the queue
-	c.newQueries <- q
-	return nil
+	select {
+	case c.newQueries <- q:
+		return nil
+	case <-q.parentCtx.Done():
+		q.queueSpan.Finish()
+		return q.parentCtx.Err()
+	}
 }
 
 func (c *Controller) nextID() QueryID {
@@ -187,11 +220,11 @@ func (c *Controller) run() {
 		q := pq.Peek()
 		if q != nil {
 			pop, err := c.processQuery(q)
-			if err != nil {
-				go q.setErr(err)
-			}
 			if pop {
 				pq.Pop()
+			}
+			if err != nil {
+				go q.setErr(err)
 			}
 		}
 	}
@@ -226,7 +259,7 @@ func (c *Controller) processQuery(q *Query) (pop bool, err error) {
 			log.Println("logical plan", plan.Formatted(lp))
 		}
 
-		p, err := c.pplanner.Plan(lp, nil, q.now)
+		p, err := c.pplanner.Plan(lp, nil)
 		if err != nil {
 			return true, errors.Wrap(err, "failed to create physical plan")
 		}
@@ -253,7 +286,8 @@ func (c *Controller) processQuery(q *Query) (pop bool, err error) {
 		if !q.tryExec() {
 			return true, errors.New("failed to transition query into executing state")
 		}
-		r, err := c.executor.Execute(q.executeCtx, q.orgID, q.plan)
+		q.alloc = new(execute.Allocator)
+		r, err := c.executor.Execute(q.executeCtx, q.orgID, q.plan, q.alloc)
 		if err != nil {
 			return true, errors.Wrap(err, "failed to execute query")
 		}
@@ -308,9 +342,10 @@ type Query struct {
 
 	ready chan map[string]query.Result
 
-	mu     sync.Mutex
-	state  State
-	cancel func()
+	mu       sync.Mutex
+	state    State
+	cancel   func()
+	canceled bool
 
 	parentCtx,
 	compilingCtx,
@@ -319,6 +354,7 @@ type Query struct {
 	requeueCtx,
 	executeCtx context.Context
 
+	parentSpan,
 	compileSpan,
 	queueSpan,
 	planSpan,
@@ -329,6 +365,8 @@ type Query struct {
 
 	concurrency int
 	memory      int64
+
+	alloc *execute.Allocator
 }
 
 // ID reports an ephemeral unique ID for the query.
@@ -344,10 +382,20 @@ func (q *Query) Spec() *query.Spec {
 	return &q.spec
 }
 
+// Concurrency reports the number of goroutines allowed to process the request.
+func (q *Query) Concurrency() int {
+	return q.concurrency
+}
+
 // Cancel will stop the query execution.
 func (q *Query) Cancel() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.canceled {
+		// We have already been canceled
+		return
+	}
+	q.canceled = true
 
 	// call cancel func
 	q.cancel()
@@ -395,6 +443,7 @@ func (q *Query) finish() {
 		panic("unreachable, all states have been accounted for")
 	}
 
+	q.parentSpan.Finish()
 	q.c.queryDone <- q
 	close(q.ready)
 }
@@ -407,6 +456,36 @@ func (q *Query) Done() {
 	q.finish()
 
 	q.state = Finished
+}
+
+// Statistics reports the statisitcs for the query.
+// The statisitcs are not complete until the query is finished.
+func (q *Query) Statistics() query.Statistics {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	stats := query.Statistics{}
+	stats.TotalDuration = q.parentSpan.Duration
+	if q.compileSpan != nil {
+		stats.CompileDuration = q.compileSpan.Duration
+	}
+	if q.queueSpan != nil {
+		stats.QueueDuration = q.queueSpan.Duration
+	}
+	if q.planSpan != nil {
+		stats.PlanDuration = q.planSpan.Duration
+	}
+	if q.requeueSpan != nil {
+		stats.RequeueDuration = q.requeueSpan.Duration
+	}
+	if q.executeSpan != nil {
+		stats.ExecuteDuration = q.executeSpan.Duration
+	}
+	stats.Concurrency = q.concurrency
+	if q.alloc != nil {
+		stats.MaxAllocated = q.alloc.Max()
+	}
+	return stats
 }
 
 // State reports the current state of the query.
