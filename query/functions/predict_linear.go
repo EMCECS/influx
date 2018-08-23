@@ -161,7 +161,7 @@ func (t *PredictLinearTransformation) Process(id execute.DatasetID, tbl query.Ta
 	}
 	execute.AddTableKeyCols(tbl.Key(), builder)
 	valueIdx := builder.AddCol(query.ColMeta{
-		Label: t.spec.TimeDst,
+		Label: t.spec.ValueLabel,
 		Type:  query.TTime,
 	})
 	valueIdy := builder.AddCol(query.ColMeta{
