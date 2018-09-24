@@ -34,6 +34,8 @@ var percentileSignature = query.DefaultFunctionSignature()
 
 func init() {
 	percentileSignature.Params["p"] = semantic.Float
+	percentileSignature.Params["compression"] = semantic.Float
+	percentileSignature.Params["method"] = semantic.String
 
 	query.RegisterFunction(PercentileKind, createPercentileOpSpec, percentileSignature)
 	query.RegisterBuiltIn("median", medianBuiltin)
@@ -49,7 +51,7 @@ var medianBuiltin = `
 // median returns the 50th percentile.
 // By default an approximate percentile is computed, this can be disabled by passing exact:true.
 // Using the exact method requires that the entire data set can fit in memory.
-median = (method="estimate_tdigest", compression=0.0, table=<-) => percentile(table:table, p:0.5, method:method, compression:compression)
+median = (method="estimate_tdigest", compression=0.0, table=<-) => percentile(table:table, percentile:0.5, method:method, compression:compression)
 `
 
 func createPercentileOpSpec(args query.Arguments, a *query.Administration) (query.OperationSpec, error) {
@@ -58,7 +60,7 @@ func createPercentileOpSpec(args query.Arguments, a *query.Administration) (quer
 	}
 
 	spec := new(PercentileOpSpec)
-	p, err := args.GetRequiredFloat("p")
+	p, err := args.GetRequiredFloat("percentile")
 	if err != nil {
 		return nil, err
 	}

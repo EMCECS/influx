@@ -96,8 +96,8 @@ The following keywords are reserved and may not be used as identifiers:
     and    import  not  return
     empty  in      or
 
-[IMPL#308](https://github.com/influxdata/platform/query/issues/308) Add in and empty operator support
-[IMPL#142](https://github.com/influxdata/platform/query/issues/142) Add "import" support
+[IMPL#256](https://github.com/influxdata/platform/issues/256) Add in and empty operator support  
+[IMPL#334](https://github.com/influxdata/platform/issues/334) Add "import" support  
 
 #### Operators
 
@@ -121,7 +121,7 @@ The following coercion rules apply to numeric literals:
 * an error will occur if the coerced type cannot represent the literal value.
 
 
-[IMPL#309](https://github.com/influxdata/platform/query/issues/309) Allow numeric literal coercion.
+[IMPL#255](https://github.com/influxdata/platform/issues/255) Allow numeric literal coercion.
 
 ##### Integer literals
 
@@ -156,7 +156,7 @@ Examples:
     2.71828
     .26
 
-[IMPL#310](https://github.com/influxdata/platform/query/issues/310) Parse float literals
+[IMPL#254](https://github.com/influxdata/platform/issues/254) Parse float literals
 
 #### Duration literals
 
@@ -223,7 +223,7 @@ Examples:
     2018-02-28T00:00:00Z + 1mo1d    // 2018-03-29T00:00:00Z
     2018-02-28T00:00:00Z + 1d + 1mo // 2018-04-01T00:00:00Z, explicit left associative add of 1d first changes the result
 
-[IMPL#311](https://github.com/influxdata/platform/query/issues/311) Parse duration literals
+[IMPL#253](https://github.com/influxdata/platform/issues/253) Parse duration literals
 
 #### Date and time literals
 
@@ -279,7 +279,7 @@ Additionally any byte value may be specified via a hex encoding using `\x` as th
 TODO(nathanielc): With string interpolation string_lit is not longer a lexical token as part of a literal, but an entire expression in and of itself.
 
 
-[IMPL#312](https://github.com/influxdata/platform/query/issues/312) Parse string literals
+[IMPL#252](https://github.com/influxdata/platform/issues/252) Parse string literals
 
 
 Examples:
@@ -299,7 +299,7 @@ A function "printf" exists to allow more precise control over formatting of vari
 To include the literal curly brackets within a string they must be escaped.
 
 
-[IMPL#316](https://github.com/influxdata/platform/query/issues/316) Add printf function
+[IMPL#248](https://github.com/influxdata/platform/issues/248) Add printf function
 
 Interpolation example:
 
@@ -309,7 +309,7 @@ Interpolation example:
     "openinng curly bracket \{" // openinng curly bracket {
     "closing curly bracket \}" // closing curly bracket }
 
-[IMPL#313](https://github.com/influxdata/platform/query/issues/313) Add string interpolation support
+[IMPL#251](https://github.com/influxdata/platform/issues/251) Add string interpolation support
 
 
 #### Regular expression literals
@@ -338,7 +338,7 @@ Examples:
 The regular expression syntax is defined by [RE2](https://github.com/google/re2/wiki/Syntax).
 
 
-[IMPL#314](https://github.com/influxdata/platform/query/issues/314) Parse regular expression literals
+[IMPL#250](https://github.com/influxdata/platform/issues/250) Parse regular expression literals
 
 ### Variables
 
@@ -351,7 +351,7 @@ A type defines the set of values and operations on those values.
 Types are never explicitly declared as part of the syntax.
 Types are always inferred from the usage of the value.
 
-[IMPL#315](https://github.com/influxdata/platform/query/issues/315) Specify type inference rules
+[IMPL#249](https://github.com/influxdata/platform/issues/249) Specify type inference rules
 
 #### Boolean types
 
@@ -417,7 +417,7 @@ The value may be any other type, and need not be the same as other values within
 A _function type_ represents a set of all functions with the same argument and result types.
 
 
-[IMPL#315](https://github.com/influxdata/platform/query/issues/315) Specify type inference rules
+[IMPL#249](https://github.com/influxdata/platform/issues/249) Specify type inference rules
 
 #### Generator types
 
@@ -471,7 +471,7 @@ The package clause is not a assignment; the package name does not appear in any 
 Its purpose is to identify the files belonging to the same package and to specify the default package name for import declarations.
 
 
-[IMPL#317](https://github.com/influxdata/platform/query/issues/317) Add package/namespace support
+[IMPL#247](https://github.com/influxdata/platform/issues/247) Add package/namespace support
 
 #### Variable assignment
 
@@ -505,7 +505,7 @@ We should simplify it and use the EBNF grammar.
 This requires redoing the parser in something besides PEG.
 
 
-[IMPL#318](https://github.com/influxdata/platform/query/issues/318) Update parser to use formal EBNF grammar.
+[IMPL#246](https://github.com/influxdata/platform/issues/246) Update parser to use formal EBNF grammar.
 
 #### Function literals
 
@@ -1022,10 +1022,6 @@ These common values are referred to as the group key value, and can be represent
 A tables schema consists of its group key, and its column's labels and types.
 
 
-[IMPL#294](https://github.com/influxdata/platform/query/issues/294) Remove concept of Kind from table columns
-[IMPL#319](https://github.com/influxdata/platform/query/issues/319) Remove concept of Bounds from tables
-[IMPL#320](https://github.com/influxdata/platform/query/issues/320) Rename block to table
-
 #### Stream
 
 A stream represents a potentially unbounded dataset.
@@ -1039,7 +1035,7 @@ Missing values are represented with a special _null_ value.
 The _null_ value can be of any data type.
 
 
-[IMPL#219](https://github.com/influxdata/platform/query/issues/219) Design how nulls behave
+[IMPL#300](https://github.com/influxdata/platform/issues/300) Design how nulls behave
 
 #### Operations
 
@@ -1094,6 +1090,9 @@ Yield has the following properties:
 * `name` string
     unique name to give to yielded results
 
+Example:
+`from(db: "telegraf") |> range(start: -5m) |> yield(name:"1")`
+
 #### Aggregate operations
 
 Aggregate operations output a table for every input table they receive.
@@ -1123,8 +1122,6 @@ All aggregate operations have the following properties:
     timeDst is the destination column to use for the resulting aggregate record.
     Defaults to `_time`.
 
-[IMPL#294](https://github.com/influxdata/platform/query/issues/294) Remove concept of Kind from table columns
-
 ##### Covariance
 
 Covariance is an aggregate operation.
@@ -1140,10 +1137,16 @@ Covariance has the following properties:
 
 Additionally exactly two columns must be provided to the `columns` property.
 
+Example:
+`from(db: "telegraf) |> range(start:-5m) |> covariance(columns: ["x", "y"])`
+
 ##### Count
 
 Count is an aggregate operation.
 For each aggregated column, it outputs the number of non null records as an integer.
+
+Example:
+`from(db: "telegraf") |> range(start: -5m) |> count()`
 
 #### Duplicate 
 Duplicate will duplicate a specified column in a table
@@ -1176,10 +1179,29 @@ Integral has the following properties:
 * `unit` duration
     unit is the time duration to use when computing the integral
 
+Example: 
+
+```
+from(db: "telegraf") 
+    |> range(start: -5m) 
+    |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system") 
+    |> integral(unit:10s)
+```
+
 ##### Mean
 
 Mean is an aggregate operation.
 For each aggregated column, it outputs the mean of the non null records as a float.
+
+Example: 
+```
+from(db:"telegraf")
+    |> filter(fn: (r) => r._measurement == "mem" AND
+            r._field == "used_percent")
+    |> range(start:-12h)
+    |> window(every:10m)
+    |> mean()
+```
 
 ##### Percentile
 
@@ -1199,10 +1221,27 @@ Percentile has the following properties:
    A larger number produces a more accurate result at the cost of increased memory requirements.
    Defaults to 1000.
 
+Example:
+```
+// Determine 99th percentile cpu system usage:
+from(db: "telegraf")
+	|> range(start: -5m)
+	|> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
+	|> percentile(p: 0.99)
+```
+
 ##### Skew
 
 Skew is an aggregate operation.
 For each aggregated column, it outputs the skew of the non null record as a float.
+
+Example:
+```
+from(db: "telegraf") 
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
+    |> skew()
+```
 
 ##### Spread
 
@@ -1211,16 +1250,39 @@ For each aggregated column, it outputs the difference between the min and max va
 The type of the output column depends on the type of input column: for input columns with type `uint` or `int`, the output is an `int`; for `float` input columns the output is a `float`.
 All other input types are invalid.
 
+Example:
+```
+from(db: "telegraf") 
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
+    |> spread()
+```
 ##### Stddev
 
 Stddev is an aggregate operation.
 For each aggregated column, it outputs the standard deviation of the non null record as a float.
+
+Example:
+```
+from(db: "telegraf") 
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
+    |> stddev()
+```
 
 ##### Sum
 
 Stddev is an aggregate operation.
 For each aggregated column, it outputs the sum of the non null record.
 The output column type is the same as the input column type.
+
+Example:
+```
+from(db: "telegraf") 
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
+    |> sum()
+```
 
 #### Multiple aggregates
 
@@ -1245,27 +1307,48 @@ All selector operations have the following properties:
 * `column` string
     column specifies a which column to use when selecting.
 
-[IMPL#294](https://github.com/influxdata/platform/query/issues/294) Remove concept of Kind from table columns
-
 ##### First
 
 First is a selector operation.
 First selects the first non null record from the input table.
+
+Example:
+`from(db:"telegraf") |> first()`
 
 ##### Last
 
 Last is a selector operation.
 Last selects the last non null record from the input table.
 
+Example:
+`from(db: "telegraf") |> last()`
+
 ##### Max
 
 Max is a selector operation.
 Max selects the maximum record from the input table.
 
+Example:
+```
+from(db:"telegraf")
+    |> range(start:-12h)
+    |> filter(fn: (r) => r._measurement == "cpu" AND r._field == "usage_system")
+    |> max()
+```
+
 ##### Min
 
 Min is a selector operation.
 Min selects the minimum record from the input table.
+
+Example: 
+
+```
+from(db:"telegraf")
+    |> range(start:-12h)
+    |> filter(fn: (r) => r._measurement == "cpu" AND r._field == "usage_system")
+    |> min()
+```
 
 ##### Sample
 
@@ -1281,6 +1364,16 @@ The following properties define how the sample is selected.
     The `pos` must be less than `n`.
     If `pos` is less than 0, a random offset is used.
     Default is -1 (random offset).
+
+Example:
+
+```
+from(db:"telegraf")
+    |> filter(fn: (r) => r._measurement == "cpu" AND
+               r._field == "usage_system")
+    |> range(start:-1d)
+    |> sample(n: 5, pos: 1)
+```
 
 
 #### Filter
@@ -1298,6 +1391,59 @@ Filter has the following properties:
     Records which evaluate to true, will be included in the output tables.
     TODO(nathanielc): Do we need a syntax for expressing type signatures?
 
+Example: 
+
+```
+from(db:"telegraf")
+    |> range(start:-12h)
+    |> filter(fn: (r) => r._measurement == "cpu" AND
+                r._field == "usage_system" AND
+                r.service == "app-server")
+```
+
+#### HistogramQuantile
+
+HistogramQuantile approximates a quantile given an histogram that approximates the cumulative distribution of the dataset.
+Each input table represents a single histogram.
+The histogram tables must have two columns, a count column and an upper bound column.
+The count is the number of values that are less than or equal to the upper bound value.
+The table can have any number of records, each representing an entry in the histogram.
+The counts must be monotonically increasing when sorted by upper bound.
+
+Linear interpolation between the two closest bounds is used to compute the quantile.
+If the either of the bounds used in interpolation are infinite, then the other finite bound is used and no interpolation is performed.
+
+The output table will have a the same group key as the input table.
+The columns not part of the group key will be removed and a single value column of type float will be added.
+The count and upper bound columns must not be part of the group key.
+The value column represents the value of the desired quantile from the histogram.
+
+HistogramQuantile has the following properties:
+
+* `quantile` float
+    Quantile is a value between 0 and 1 indicating the desired quantile to compute.
+* `countColumn` string
+    CountColumn is the name of the column containing the histogram counts.
+    The count column type must be float.
+    Defaults to `_value`.
+* `upperBoundColumn` string
+    UpperBoundColumn is the name of the column containing the histogram upper bounds.
+    The upper bound column type must be float.
+    Defaults to `upperBound`.
+* `valueColumn` string
+    ValueColumn is the name of the output column which will contain the computed quantile.
+    Defaults to `_value`.
+* `minValue` float
+    MinValue is the assumed minumum value of the dataset.
+    When the quantile falls below the lowest upper bound, interpolation is performed between
+    minValue and the lowest upper bound.
+    When minValue is equal to negative infinity, the lowest upper bound is used.
+    Defaults to 0.
+
+Example:
+
+    histogramQuantile(quantile:0.9)  // compute the 90th quantile using histogram data.
+
 #### Limit
 
 Limit caps the number of records in output tables to a fixed size n.
@@ -1309,6 +1455,8 @@ Limit has the following properties:
 
 * `n` int
     The maximum number of records to output.
+
+Example: `from(db: "telegraf") |> limit(n: 10)`
 
 #### Map
 
@@ -1330,6 +1478,27 @@ Map has the following properties:
     When not merging, only columns defined on the returned record will be present on the output records.
     Defaults to true.
 
+Example:
+```
+from(db:"telegraf")
+    |> filter(fn: (r) => r._measurement == "cpu" AND
+                r._field == "usage_system" AND
+                r.service == "app-server")
+    |> range(start:-12h)
+    // Square the value
+    |> map(fn: (r) => r._value * r._value)
+```
+Example (creating a new table):
+```
+from(db:"telegraf")
+    |> filter(fn: (r) => r._measurement == "cpu" AND
+                r._field == "usage_system" AND
+                r.service == "app-server")
+    |> range(start:-12h)
+    // create a new table by copying each row into a new format
+    |> map(fn: (r) => {_time: r._time, app_server: r._service})
+```
+
 #### Range
 
 Range filters records based on provided time bounds.
@@ -1338,7 +1507,7 @@ Each input table's group key value is modified to fit within the time bounds.
 Tables where all records exists outside the time bounds are filtered entirely.
 
 
-[IMPL#321](https://github.com/influxdata/platform/query/issues/321) Update range to default to aligned window ranges.
+[IMPL#244](https://github.com/influxdata/platform/issues/244) Update range to default to aligned window ranges.
 
 Range has the following properties:
 
@@ -1348,6 +1517,20 @@ Range has the following properties:
     Specifies the exclusive newest time to be included in the results.
     Defaults to the value of the `now` option time.
 
+Example:
+```
+from(db:"telegraf")
+    |> range(start:-12h, stop: -15m)
+    |> filter(fn: (r) => r._measurement == "cpu" AND
+               r._field == "usage_system")
+```
+Example:
+```
+from(db:"telegraf")
+    |> range(start:2018-05-22T23:30:00Z, stop: 2018-05-23T00:00:00Z)
+    |> filter(fn: (r) => r._measurement == "cpu" AND
+               r._field == "usage_system")
+```
 #### Rename 
 
 Rename will rename specified columns in a table. 
@@ -1364,9 +1547,18 @@ Rename has the following properties:
 
 Example usage:
 
-Rename a single column: `rename(columns:{host: "server"})`
-
-Rename all columns with `fn` parameter: `rename(fn: (col) => "{col}_new")`
+Rename a single column: 
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> rename(columns:{host: "server"})
+```
+Rename all columns using `fn` parameter: 
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> rename(fn: (col) => "{col}_new")
+```
 
 #### Drop 
 
@@ -1383,9 +1575,18 @@ Drop has the following properties:
 
 Example Usage:
 
-Drop a list of columns: `drop(columns: ["host", "_measurement"])`
-
-Drop all columns matching a predicate: `drop(fn: (col) => col =~ /usage*/)`
+Drop a list of columns
+```
+from(db: "telegraf")
+	|> range(start: -5m)
+	|> drop(columns: ["host", "_measurement"])
+```
+Drop columns matching a predicate:
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> drop(fn: (col) => col =~ /usage*/)
+```
 
 #### Keep 
 
@@ -1406,6 +1607,18 @@ Keep a list of columns: `keep(columns: ["_time", "_value"])`
 
 Keep all columns matching a predicate: `keep(fn: (col) => col =~ /inodes*/)`
 
+Keep a list of columns:
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> keep(columns: ["_time", "_value"])
+```
+Keep all columns matching a predicate:
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> keep(fn: (col) => col =~ /inodes*/) 
+```
 
 #### Set
 
@@ -1421,6 +1634,10 @@ Set has the following properties:
 * `value` string
     value is the string value to set
 
+Example: 
+```
+from(db: "telegraf") |> set(key: "mykey", value: "myvalue")
+```
 
 #### Sort
 
@@ -1436,7 +1653,14 @@ Sort has the following properties:
 * `desc` bool
     Sort results in descending order.
 
-
+Example:
+```
+from(db:"telegraf")
+    |> filter(fn: (r) => r._measurement == "system" AND
+               r._field == "uptime")
+    |> range(start:-12h)
+    |> sort(cols:["region", "host", "value"])
+```
 #### Group
 
 Group groups records based on their values for specific columns.
@@ -1448,17 +1672,29 @@ Group has the following properties:
     Group by these specific columns.
     Cannot be used with `except`.
 *  `except` list of strings
-    Group by all other column except this list of columns.
+    Group by all other columns except this list.
     Cannot be used with `by`.
 
 Examples:
-
     group(by:["host"]) // group records by their "host" value
     group(except:["_time", "region", "_value"]) // group records by all other columns except for _time, region, and _value
     group(by:[]) // group all records into a single group
     group(except:[]) // group records into all unique groups
 
-[IMPL#322](https://github.com/influxdata/platform/query/issues/322) Investigate always keeping all columns in group.
+```
+from(db: "telegraf") 
+    |> range(start: -30m) 
+    |> group(by: ["host", "_measurement"])
+```
+All records are grouped by the "host" and "_measurement" columns. The resulting group key would be ["host, "_measurement"]
+
+```
+from(db: "telegraf")
+    |> range(start: -30m)
+    |> group(except: ["_time"])
+```
+All records are grouped by the set of all columns in the table, excluding "_time". For example, if the table has columns ["_time", "host", "_measurement", "_field", "_value"] then the group key would be ["host", "_measurement", "_field", "_value"]
+
 
 #### Window
 
@@ -1497,10 +1733,18 @@ Window has the following properties:
     Name of the column containing the window stop time.
     Defaults to `_stop`.
 
-Examples:
+Example: 
+```
+from(db:"telegraf")
+    |> range(start:-12h)
+    |> window(every:10m)
+    |> max()
+```
 
-    window(every:1h) // window the data into 1 hour intervals
-    window(intervals: intervals(every:1d, period:8h, offset:9h)) // window the data into 8 hour intervals starting at 9AM every day.
+```
+window(every:1h) // window the data into 1 hour intervals
+window(intervals: intervals(every:1d, period:8h, offset:9h)) // window the data into 8 hour intervals starting at 9AM every day.
+```
 
 #### Pivot
 
@@ -1673,6 +1917,14 @@ Cumulative sum has the following properties:
 * `columns` list string
     columns is a list of columns on which to operate.
 
+Example:
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "disk" and r._field == "used_percent")
+    |> cumulativeSum(columns: ["_value"])
+```
+
 #### Derivative
 
 Derivative computes the time based difference between subsequent non null records.
@@ -1690,6 +1942,13 @@ Derivative has the following properties:
     timeSrc is the source column for the time values.
     Defaults to `_time`.
 
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "disk" and r._field == "used_percent")
+    |> derivative(nonNegative: true, columns: ["used_percent"])
+```
+
 #### Difference
 
 Difference computes the difference between subsequent non null records.
@@ -1702,6 +1961,12 @@ Difference has the following properties:
 * `columns` list strings
     columns is a list of columns on which to compute the difference.
 
+```
+from(db: "telegraf")
+    |> range(start: -5m)
+    |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_user")
+    |> difference()
+```
 #### Distinct
 
 Distinct produces the unique values for a given column.
@@ -1711,6 +1976,13 @@ Distinct has the following properties:
 * `column` string
     column the column on which to track unique values.
 
+Example: 
+```
+from(db: "telegraf")
+	|> range(start: -5m)
+	|> filter(fn: (r) => r._measurement == "cpu")
+	|> distinct(column: "host")
+```
 
 #### Shift
 
@@ -1725,6 +1997,12 @@ Shift has the following properties:
 * `columns` list of strings
     columns is the list of all columns that should be shifted.
     Defaults to `["_start", "_stop", "_time"]`
+Example:
+```
+from(db: "telegraf")
+	|> range(start: -5m)
+	|> shift(shift: 1000h)
+```
 
 
 #### To
@@ -1859,7 +2137,7 @@ The function `toUInt` is defined as `toUInt = (table=<-) => table |> map(fn:(r) 
 If you need to convert other columns use the `map` function directly with the `uint` function.
 
 
-[IMPL#324](https://github.com/influxdata/platform/query/issues/324) Update specification around type conversion functions.
+[IMPL#242](https://github.com/influxdata/platform/issues/242) Update specification around type conversion functions.
 
 
 ### Composite data types
@@ -1871,7 +2149,7 @@ A composite data type is a collection of primitive data types that together have
 Histogram is a composite type that represents a discrete cumulative distribution.
 Given a histogram with N buckets there will be N columns with the label `le_X` where `X` is replaced with the upper bucket boundary.
 
-[IMPL#325](https://github.com/influxdata/platform/query/issues/325) Add support for a histogram composite data type.
+[IMPL#241](https://github.com/influxdata/platform/issues/241) Add support for a histogram composite data type.
 
 ### Triggers
 
@@ -1896,7 +2174,7 @@ Currently all tables use an _after watermark_ trigger which fires only once the 
 
 Data sources are responsible for informing about updates to the watermark.
 
-[IMPL#326](https://github.com/influxdata/platform/query/issues/326) Make trigger support not dependent on specific columns
+[IMPL#240](https://github.com/influxdata/platform/issues/240) Make trigger support not dependent on specific columns
 
 ### Execution model
 
@@ -2234,7 +2512,3 @@ Example error encoding with after a valid table has already been encoded.
 ,error,reference
 ,query terminated: reached maximum allowed memory limits,576
 ```
-
-[IMPL#327](https://github.com/influxdata/platform/query/issues/327) Finalize csv encoding specification
-
-
