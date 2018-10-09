@@ -11,12 +11,13 @@ This may brake the build. It may be necessary to execute the additional steps be
     ```bash
     cd $GOPATH/src/github.com/influxdata/platform
     git remote remove origin
-    git remote add origin https://github.com/akurilov/influx
+    git remote add origin https://github.com/EMCECS/influx
     ```
 
 3. Merge the changes from the fork, get the dependencies
     ```bash
     git pull
+    dep init
     dep ensure
     ```
     
