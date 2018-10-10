@@ -20,54 +20,86 @@ type groupInfo struct {
 }
 
 type groupVisitor struct {
-	groups []*groupInfo
+	calls []*function
+	refs  []*influxql.VarRef
+	err   error
 }
 
 func (v *groupVisitor) Visit(n influxql.Node) influxql.Visitor {
+	if v.err != nil {
+		return nil
+	}
+
 	// TODO(jsternberg): Identify duplicates so they are a single common instance.
 	switch expr := n.(type) {
 	case *influxql.Call:
 		// TODO(jsternberg): Identify math functions so we visit their arguments instead of recording them.
-		// If we have a single group, it does not contain a call, and this is a selector, make this
-		// the function call for the first group.
-		if len(v.groups) > 0 && influxql.IsSelector(expr) && v.groups[0].call == nil {
-			v.groups[0].call = expr
-		} else {
-			// Otherwise, we create a new group and place this expression as the call.
-			v.groups = append(v.groups, &groupInfo{call: expr})
+		fn, err := parseFunction(expr)
+		if err != nil {
+			v.err = err
+			return nil
 		}
+		v.calls = append(v.calls, fn)
+		return nil
+	case *influxql.Distinct:
+		v.err = errors.New("unimplemented: distinct expression")
 		return nil
 	case *influxql.VarRef:
-		// If we have one group, add this as a variable reference to that group.
-		// If we have zero, then create the first group. If there are multiple groups,
-		// that's technically a query error, but we'll capture that somewhere else before
-		// this (maybe).
-		// TODO(jsternberg): Identify invalid queries where an aggregate is used with a raw value.
-		if len(v.groups) == 0 {
-			v.groups = append(v.groups, &groupInfo{})
+		if expr.Val == "time" {
+			return nil
 		}
-		v.groups[0].refs = append(v.groups[0].refs, expr)
+		v.refs = append(v.refs, expr)
+		return nil
+	case *influxql.Wildcard:
+		v.err = errors.New("unimplemented: field wildcard")
+		return nil
+	case *influxql.RegexLiteral:
+		v.err = errors.New("unimplemented: field regex wildcard")
 		return nil
 	}
 	return v
 }
 
 // identifyGroups will identify the groups for creating data access cursors.
-func identifyGroups(stmt *influxql.SelectStatement) []*groupInfo {
-	// Try to estimate the number of groups. This isn't a very important step so we
-	// don't care if we are wrong. If this is a raw query, then the size is going to be 1.
-	// If this is an aggregate, the size will probably be the number of fields.
-	// If this is a selector, the size will be 1 again so we'll just get this wrong.
-	sizeHint := 1
-	if !stmt.IsRawQuery {
-		sizeHint = len(stmt.Fields)
+func identifyGroups(stmt *influxql.SelectStatement) ([]*groupInfo, error) {
+	v := &groupVisitor{}
+	influxql.Walk(v, stmt.Fields)
+	if v.err != nil {
+		return nil, v.err
 	}
 
-	v := &groupVisitor{
-		groups: make([]*groupInfo, 0, sizeHint),
+	// Attempt to take the calls and variables and put them into groups.
+	if len(v.refs) > 0 {
+		// If any of the calls are not selectors, we have an error message.
+		for _, fn := range v.calls {
+			if !influxql.IsSelector(fn.call) {
+				return nil, errors.New("mixing aggregate and non-aggregate queries is not supported")
+			}
+		}
+
+		// All of the functions are selectors. If we have more than 1, then we have another error message.
+		if len(v.calls) > 1 {
+			return nil, errors.New("mixing multiple selector functions with tags or fields is not supported")
+		}
+
+		// Otherwise, we create a single group.
+		var call *influxql.Call
+		if len(v.calls) == 1 {
+			call = v.calls[0].call
+		}
+		return []*groupInfo{{
+			call: call,
+			refs: v.refs,
+		}}, nil
 	}
-	influxql.Walk(v, stmt.Fields)
-	return v.groups
+
+	// We do not have any auxiliary fields so each of the function calls goes into
+	// its own group.
+	groups := make([]*groupInfo, 0, len(v.calls))
+	for _, fn := range v.calls {
+		groups = append(groups, &groupInfo{call: fn.call})
+	}
+	return groups, nil
 }
 
 func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
@@ -101,7 +133,7 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		tags map[influxql.VarRef]struct{}
 		cond influxql.Expr
 	)
-	valuer := influxql.NowValuer{Now: t.now}
+	valuer := influxql.NowValuer{Now: t.spec.Now}
 	if t.stmt.Condition != nil {
 		var err error
 		if cond, _, err = influxql.ConditionExpr(t.stmt.Condition, &valuer); err != nil {
@@ -151,6 +183,10 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 	// TODO(jsternberg): We need to differentiate between various join types and this needs to be
 	// except: ["_field"] rather than joining on the _measurement. This also needs to specify what the time
 	// column should be.
+	if len(cursors) > 1 {
+		return nil, errors.New("unimplemented: joining fields within a cursor")
+	}
+
 	cur := Join(t, cursors, []string{"_measurement"}, nil)
 	if len(tags) > 0 {
 		cur = &tagsCursor{cursor: cur, tags: tags}
@@ -181,6 +217,11 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		cur = c
 	}
 
+	interval, err := t.stmt.GroupByInterval()
+	if err != nil {
+		return nil, err
+	}
+
 	// If a function call is present, evaluate the function call.
 	if gr.call != nil {
 		c, err := createFunctionCursor(t, gr.call, cur)
@@ -191,18 +232,32 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 
 		// If there was a window operation, we now need to undo that and sort by the start column
 		// so they stay in the same table and are joined in the correct order.
-		if interval, err := t.stmt.GroupByInterval(); err == nil && interval > 0 {
+		if interval > 0 {
 			cur = &groupCursor{
 				id: t.op("window", &functions.WindowOpSpec{
-					Every:              query.Duration(math.MaxInt64),
-					Period:             query.Duration(math.MaxInt64),
-					IgnoreGlobalBounds: true,
-					TimeCol:            execute.DefaultTimeColLabel,
-					StartColLabel:      execute.DefaultStartColLabel,
-					StopColLabel:       execute.DefaultStopColLabel,
+					Every:         query.Duration(math.MaxInt64),
+					Period:        query.Duration(math.MaxInt64),
+					TimeCol:       execute.DefaultTimeColLabel,
+					StartColLabel: execute.DefaultStartColLabel,
+					StopColLabel:  execute.DefaultStopColLabel,
 				}, cur.ID()),
 				cursor: cur,
 			}
+		}
+	} else {
+		// If we do not have a function, but we have a field option,
+		// return the appropriate error message if there is something wrong with the query.
+		if interval > 0 {
+			return nil, errors.New("GROUP BY requires at least one aggregate function")
+		}
+
+		// TODO(jsternberg): Fill needs to be somewhere and it's probably here somewhere.
+		// Move this to the correct location once we've figured it out.
+		switch t.stmt.Fill {
+		case influxql.NoFill:
+			return nil, errors.New("fill(none) must be used with a function")
+		case influxql.LinearFill:
+			return nil, errors.New("fill(linear) must be used with a function")
 		}
 	}
 	return cur, nil
@@ -215,7 +270,8 @@ type groupCursor struct {
 
 func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
 	var windowEvery time.Duration
-	tags := []string{"_measurement"}
+	var windowStart time.Time
+	tags := []string{"_measurement", "_start"}
 	if len(t.stmt.Dimensions) > 0 {
 		// Maintain a set of the dimensions we have encountered.
 		// This is so we don't duplicate groupings, but we still maintain the
@@ -246,8 +302,43 @@ func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
 					return nil, errors.New("multiple time dimensions not allowed")
 				} else {
 					windowEvery = lit.Val
+					var windowOffset time.Duration
 					if len(expr.Args) == 2 {
-						return nil, errors.New("unimplemented: group by offsets")
+						switch lit2 := expr.Args[1].(type) {
+						case *influxql.DurationLiteral:
+							windowOffset = lit2.Val % windowEvery
+						case *influxql.TimeLiteral:
+							windowOffset = lit2.Val.Sub(lit2.Val.Truncate(windowEvery))
+						case *influxql.Call:
+							if lit2.Name != "now" {
+								return nil, errors.New("time dimension offset function must be now()")
+							} else if len(lit2.Args) != 0 {
+								return nil, errors.New("time dimension offset now() function requires no arguments")
+							}
+							now := t.spec.Now
+							windowOffset = now.Sub(now.Truncate(windowEvery))
+
+							// Use the evaluated offset to replace the argument. Ideally, we would
+							// use the interval assigned above, but the query engine hasn't been changed
+							// to use the compiler information yet.
+							expr.Args[1] = &influxql.DurationLiteral{Val: windowOffset}
+						case *influxql.StringLiteral:
+							// If literal looks like a date time then parse it as a time literal.
+							if lit2.IsTimeLiteral() {
+								t, err := lit2.ToTimeLiteral(t.stmt.Location)
+								if err != nil {
+									return nil, err
+								}
+								windowOffset = t.Val.Sub(t.Val.Truncate(windowEvery))
+							} else {
+								return nil, errors.New("time dimension offset must be duration or now()")
+							}
+						default:
+							return nil, errors.New("time dimension offset must be duration or now()")
+						}
+
+						//TODO set windowStart
+						windowStart = time.Unix(0, 0).Add(windowOffset)
 					}
 				}
 			case *influxql.Wildcard:
@@ -268,14 +359,19 @@ func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
 	}, in.ID())
 
 	if windowEvery > 0 {
-		id = t.op("window", &functions.WindowOpSpec{
-			Every:              query.Duration(windowEvery),
-			Period:             query.Duration(windowEvery),
-			IgnoreGlobalBounds: true,
-			TimeCol:            execute.DefaultTimeColLabel,
-			StartColLabel:      execute.DefaultStartColLabel,
-			StopColLabel:       execute.DefaultStopColLabel,
-		}, id)
+		windowOp := &functions.WindowOpSpec{
+			Every:         query.Duration(windowEvery),
+			Period:        query.Duration(windowEvery),
+			TimeCol:       execute.DefaultTimeColLabel,
+			StartColLabel: execute.DefaultStartColLabel,
+			StopColLabel:  execute.DefaultStopColLabel,
+		}
+
+		if !windowStart.IsZero() {
+			windowOp.Start = query.Time{Absolute: windowStart}
+		}
+
+		id = t.op("window", windowOp, id)
 	}
 
 	return &groupCursor{id: id, cursor: in}, nil

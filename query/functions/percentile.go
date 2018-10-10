@@ -14,34 +14,47 @@ import (
 )
 
 const PercentileKind = "percentile"
-const ExactPercentileKind = "exact-percentile"
+const ExactPercentileAggKind = "exact-percentile-aggregate"
+const ExactPercentileSelectKind = "exact-percentile-selector"
+
+const (
+	methodEstimateTdigest = "estimate_tdigest"
+	methodExactMean       = "exact_mean"
+	methodExactSelector   = "exact_selector"
+)
 
 type PercentileOpSpec struct {
 	Percentile  float64 `json:"percentile"`
 	Compression float64 `json:"compression"`
-	Exact       bool    `json:"exact"`
+	Method      string  `json:"method"`
+	// percentile is either an aggregate, or a selector based on the options
 	execute.AggregateConfig
+	execute.SelectorConfig
 }
 
-var percentileSignature = query.DefaultFunctionSignature()
+var percentileSignature = execute.DefaultAggregateSignature()
 
 func init() {
+	percentileSignature.Params["column"] = semantic.String
 	percentileSignature.Params["p"] = semantic.Float
+	percentileSignature.Params["compression"] = semantic.Float
+	percentileSignature.Params["method"] = semantic.String
 
 	query.RegisterFunction(PercentileKind, createPercentileOpSpec, percentileSignature)
-	query.RegisterBuiltIn("percentile", percentileBuiltin)
+	query.RegisterBuiltIn("median", medianBuiltin)
 
 	query.RegisterOpSpec(PercentileKind, newPercentileOp)
 	plan.RegisterProcedureSpec(PercentileKind, newPercentileProcedure, PercentileKind)
 	execute.RegisterTransformation(PercentileKind, createPercentileTransformation)
-	execute.RegisterTransformation(ExactPercentileKind, createExactPercentileTransformation)
+	execute.RegisterTransformation(ExactPercentileAggKind, createExactPercentileAggTransformation)
+	execute.RegisterTransformation(ExactPercentileSelectKind, createExactPercentileSelectTransformation)
 }
 
-var percentileBuiltin = `
+var medianBuiltin = `
 // median returns the 50th percentile.
 // By default an approximate percentile is computed, this can be disabled by passing exact:true.
 // Using the exact method requires that the entire data set can fit in memory.
-median = (exact=false, compression=0.0, table=<-) => percentile(table:table, p:0.5, exact:exact, compression:compression)
+median = (method="estimate_tdigest", compression=0.0, table=<-) => percentile(table:table, percentile:0.5, method:method, compression:compression)
 `
 
 func createPercentileOpSpec(args query.Arguments, a *query.Administration) (query.OperationSpec, error) {
@@ -50,7 +63,7 @@ func createPercentileOpSpec(args query.Arguments, a *query.Administration) (quer
 	}
 
 	spec := new(PercentileOpSpec)
-	p, err := args.GetRequiredFloat("p")
+	p, err := args.GetRequiredFloat("percentile")
 	if err != nil {
 		return nil, err
 	}
@@ -60,28 +73,32 @@ func createPercentileOpSpec(args query.Arguments, a *query.Administration) (quer
 		return nil, errors.New("percentile must be between 0 and 1.")
 	}
 
+	if m, ok, err := args.GetString("method"); err != nil {
+		return nil, err
+	} else if ok {
+		spec.Method = m
+	}
+
 	if c, ok, err := args.GetFloat("compression"); err != nil {
 		return nil, err
 	} else if ok {
 		spec.Compression = c
 	}
 
-	if exact, ok, err := args.GetBool("exact"); err != nil {
-		return nil, err
-	} else if ok {
-		spec.Exact = exact
-	}
-
-	if spec.Compression > 0 && spec.Exact {
-		return nil, errors.New("cannot specify both compression and exact.")
+	if spec.Compression > 0 && spec.Method != methodEstimateTdigest {
+		return nil, errors.New("compression parameter is only valid for method estimate_tdigest.")
 	}
 
 	// Set default Compression if not exact
-	if !spec.Exact && spec.Compression == 0 {
+	if spec.Method == methodEstimateTdigest && spec.Compression == 0 {
 		spec.Compression = 1000
 	}
 
 	if err := spec.AggregateConfig.ReadArgs(args); err != nil {
+		return nil, err
+	}
+
+	if err := spec.SelectorConfig.ReadArgs(args); err != nil {
 		return nil, err
 	}
 
@@ -96,33 +113,45 @@ func (s *PercentileOpSpec) Kind() query.OperationKind {
 	return PercentileKind
 }
 
-type PercentileProcedureSpec struct {
+type TDigestPercentileProcedureSpec struct {
 	Percentile  float64 `json:"percentile"`
 	Compression float64 `json:"compression"`
 	execute.AggregateConfig
 }
 
-func (s *PercentileProcedureSpec) Kind() plan.ProcedureKind {
+func (s *TDigestPercentileProcedureSpec) Kind() plan.ProcedureKind {
 	return PercentileKind
 }
-func (s *PercentileProcedureSpec) Copy() plan.ProcedureSpec {
-	return &PercentileProcedureSpec{
+func (s *TDigestPercentileProcedureSpec) Copy() plan.ProcedureSpec {
+	return &TDigestPercentileProcedureSpec{
 		Percentile:      s.Percentile,
 		Compression:     s.Compression,
 		AggregateConfig: s.AggregateConfig,
 	}
 }
 
-type ExactPercentileProcedureSpec struct {
+type ExactPercentileAggProcedureSpec struct {
 	Percentile float64 `json:"percentile"`
 	execute.AggregateConfig
 }
 
-func (s *ExactPercentileProcedureSpec) Kind() plan.ProcedureKind {
-	return ExactPercentileKind
+func (s *ExactPercentileAggProcedureSpec) Kind() plan.ProcedureKind {
+	return ExactPercentileAggKind
 }
-func (s *ExactPercentileProcedureSpec) Copy() plan.ProcedureSpec {
-	return &ExactPercentileProcedureSpec{Percentile: s.Percentile}
+func (s *ExactPercentileAggProcedureSpec) Copy() plan.ProcedureSpec {
+	return &ExactPercentileAggProcedureSpec{Percentile: s.Percentile, AggregateConfig: s.AggregateConfig}
+}
+
+type ExactPercentileSelectProcedureSpec struct {
+	Percentile float64 `json:"percentile"`
+	execute.SelectorConfig
+}
+
+func (s *ExactPercentileSelectProcedureSpec) Kind() plan.ProcedureKind {
+	return ExactPercentileSelectKind
+}
+func (s *ExactPercentileSelectProcedureSpec) Copy() plan.ProcedureSpec {
+	return &ExactPercentileSelectProcedureSpec{Percentile: s.Percentile}
 }
 
 func newPercentileProcedure(qs query.OperationSpec, a plan.Administration) (plan.ProcedureSpec, error) {
@@ -130,17 +159,27 @@ func newPercentileProcedure(qs query.OperationSpec, a plan.Administration) (plan
 	if !ok {
 		return nil, fmt.Errorf("invalid spec type %T", qs)
 	}
-	if spec.Exact {
-		return &ExactPercentileProcedureSpec{
+
+	switch spec.Method {
+	case methodExactMean:
+		return &ExactPercentileAggProcedureSpec{
 			Percentile:      spec.Percentile,
 			AggregateConfig: spec.AggregateConfig,
 		}, nil
+	case methodExactSelector:
+		return &ExactPercentileSelectProcedureSpec{
+			Percentile: spec.Percentile,
+		}, nil
+	case methodEstimateTdigest:
+		fallthrough
+	default:
+		// default to estimated percentile
+		return &TDigestPercentileProcedureSpec{
+			Percentile:      spec.Percentile,
+			Compression:     spec.Compression,
+			AggregateConfig: spec.AggregateConfig,
+		}, nil
 	}
-	return &PercentileProcedureSpec{
-		Percentile:      spec.Percentile,
-		Compression:     spec.Compression,
-		AggregateConfig: spec.AggregateConfig,
-	}, nil
 }
 
 type PercentileAgg struct {
@@ -151,7 +190,7 @@ type PercentileAgg struct {
 }
 
 func createPercentileTransformation(id execute.DatasetID, mode execute.AccumulationMode, spec plan.ProcedureSpec, a execute.Administration) (execute.Transformation, execute.Dataset, error) {
-	ps, ok := spec.(*PercentileProcedureSpec)
+	ps, ok := spec.(*TDigestPercentileProcedureSpec)
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", ps)
 	}
@@ -204,12 +243,11 @@ func (a *PercentileAgg) ValueFloat() float64 {
 
 type ExactPercentileAgg struct {
 	Quantile float64
-
-	data []float64
+	data     []float64
 }
 
-func createExactPercentileTransformation(id execute.DatasetID, mode execute.AccumulationMode, spec plan.ProcedureSpec, a execute.Administration) (execute.Transformation, execute.Dataset, error) {
-	ps, ok := spec.(*ExactPercentileProcedureSpec)
+func createExactPercentileAggTransformation(id execute.DatasetID, mode execute.AccumulationMode, spec plan.ProcedureSpec, a execute.Administration) (execute.Transformation, execute.Dataset, error) {
+	ps, ok := spec.(*ExactPercentileAggProcedureSpec)
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", ps)
 	}
@@ -271,4 +309,95 @@ func (a *ExactPercentileAgg) ValueFloat() float64 {
 	y := y0*(x1-x) + y1*(x-x0)
 
 	return y
+}
+
+func createExactPercentileSelectTransformation(id execute.DatasetID, mode execute.AccumulationMode, spec plan.ProcedureSpec, a execute.Administration) (execute.Transformation, execute.Dataset, error) {
+	ps, ok := spec.(*ExactPercentileSelectProcedureSpec)
+	if !ok {
+		return nil, nil, fmt.Errorf("invalid spec type %T", ps)
+	}
+
+	cache := execute.NewTableBuilderCache(a.Allocator())
+	d := execute.NewDataset(id, mode, cache)
+	t := NewExactPercentileSelectorTransformation(d, cache, ps, a.Allocator())
+
+	return t, d, nil
+}
+
+type ExactPercentileSelectorTransformation struct {
+	d     execute.Dataset
+	cache execute.TableBuilderCache
+	spec  ExactPercentileSelectProcedureSpec
+	a     *execute.Allocator
+}
+
+func NewExactPercentileSelectorTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *ExactPercentileSelectProcedureSpec, a *execute.Allocator) *ExactPercentileSelectorTransformation {
+	if spec.SelectorConfig.Column == "" {
+		spec.SelectorConfig.Column = execute.DefaultValueColLabel
+	}
+
+	sel := &ExactPercentileSelectorTransformation{
+		d:     d,
+		cache: cache,
+		spec:  *spec,
+		a:     a,
+	}
+	return sel
+}
+
+func (t *ExactPercentileSelectorTransformation) Process(id execute.DatasetID, tbl query.Table) error {
+	valueIdx := execute.ColIdx(t.spec.Column, tbl.Cols())
+	if valueIdx < 0 {
+		return fmt.Errorf("no column %q exists", t.spec.Column)
+	}
+
+	copyTable := execute.NewColListTableBuilder(tbl.Key(), t.a)
+	execute.AddTableCols(tbl, copyTable)
+	execute.AppendTable(tbl, copyTable)
+	copyTable.Sort([]string{t.spec.Column}, false)
+
+	n := copyTable.RawTable().NRows()
+	index := getQuantileIndex(t.spec.Percentile, n)
+	row := copyTable.RawTable().GetRow(index)
+
+	builder, new := t.cache.TableBuilder(tbl.Key())
+	if !new {
+		return fmt.Errorf("found duplicate table with key: %v", tbl.Key())
+	}
+	execute.AddTableCols(tbl, builder)
+
+	for j, col := range builder.Cols() {
+		v, ok := row.Get(col.Label)
+		if !ok {
+			return fmt.Errorf("unexpected column in percentile select")
+		}
+		builder.AppendValue(j, v)
+	}
+
+	return nil
+}
+
+func getQuantileIndex(quantile float64, len int) int {
+	x := quantile * float64(len)
+	index := int(math.Ceil(x))
+	if index > 0 {
+		index--
+	}
+	return index
+}
+
+func (t *ExactPercentileSelectorTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+	return t.d.RetractTable(key)
+}
+
+func (t *ExactPercentileSelectorTransformation) UpdateWatermark(id execute.DatasetID, mark execute.Time) error {
+	return t.d.UpdateWatermark(mark)
+}
+
+func (t *ExactPercentileSelectorTransformation) UpdateProcessingTime(id execute.DatasetID, pt execute.Time) error {
+	return t.d.UpdateProcessingTime(pt)
+}
+
+func (t *ExactPercentileSelectorTransformation) Finish(id execute.DatasetID, err error) {
+	t.d.Finish(err)
 }

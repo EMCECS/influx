@@ -3,13 +3,20 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"strings"
 	"time"
 
+	"github.com/influxdata/platform/kit/prom"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
+	"github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 )
 
 const (
@@ -30,16 +37,45 @@ type Handler struct {
 	DebugHandler http.Handler
 	// Handler handles all other requests
 	Handler http.Handler
+
+	requests   *prometheus.CounterVec
+	requestDur *prometheus.HistogramVec
+
+	// Logger if set will log all HTTP requests as they are served
+	Logger *zap.Logger
+
+	// Tracer if set will be used to propagate traces through HTTP requests
+	Tracer opentracing.Tracer
 }
 
 // NewHandler creates a new handler with the given name.
 // The name is used to tag the metrics produced by this handler.
+//
+// The MetricsHandler is set to the default prometheus handler.
+// It is the caller's responsibility to call prometheus.MustRegister(h.PrometheusCollectors()...).
+// In most cases, you want to use NewHandlerFromRegistry instead.
 func NewHandler(name string) *Handler {
-	return &Handler{
+	h := &Handler{
 		name:           name,
 		MetricsHandler: promhttp.Handler(),
 		DebugHandler:   http.DefaultServeMux,
 	}
+	h.initMetrics()
+	return h
+}
+
+// NewHandlerFromRegistry creates a new handler with the given name,
+// and sets the /metrics endpoint to use the metrics from the given registry,
+// after self-registering h's metrics.
+func NewHandlerFromRegistry(name string, reg *prom.Registry) *Handler {
+	h := &Handler{
+		name:           name,
+		MetricsHandler: reg.HTTPHandler(),
+		DebugHandler:   http.DefaultServeMux,
+	}
+	h.initMetrics()
+	reg.MustRegister(h.PrometheusCollectors()...)
+	return h
 }
 
 // ServeHTTP delegates a request to the appropriate subhandler.
@@ -48,22 +84,57 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statusW := newStatusResponseWriter(w)
 	w = statusW
 
+	if h.Tracer != nil {
+		// Extract opentracing Span
+		var serverSpan opentracing.Span
+		opName := fmt.Sprintf("%s:%s", h.name, r.URL.Path)
+		wireContext, _ := h.Tracer.Extract(
+			opentracing.HTTPHeaders,
+			opentracing.HTTPHeadersCarrier(r.Header),
+		)
+
+		// Create the span referring to the RPC client if available.
+		// If wireContext == nil, a root span will be created.
+		serverSpan = h.Tracer.StartSpan(
+			opName,
+			ext.RPCServerOption(wireContext),
+		)
+		serverSpan.LogFields(log.String("handler", h.name))
+		defer serverSpan.Finish()
+
+		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), serverSpan))
+	}
+
 	// TODO: This could be problematic eventually. But for now it should be fine.
-	defer func() {
-		httpRequests.With(prometheus.Labels{
-			"handler": h.name,
-			"method":  r.Method,
-			"path":    r.URL.Path,
-			"status":  statusW.statusCodeClass(),
-		}).Inc()
-	}()
 	defer func(start time.Time) {
-		httpRequestDuration.With(prometheus.Labels{
+		duration := time.Since(start)
+		statusClass := statusW.statusCodeClass()
+		statusCode := statusW.code()
+		h.requests.With(prometheus.Labels{
 			"handler": h.name,
 			"method":  r.Method,
 			"path":    r.URL.Path,
-			"status":  statusW.statusCodeClass(),
-		}).Observe(time.Since(start).Seconds())
+			"status":  statusClass,
+		}).Inc()
+		h.requestDur.With(prometheus.Labels{
+			"handler": h.name,
+			"method":  r.Method,
+			"path":    r.URL.Path,
+			"status":  statusClass,
+		}).Observe(duration.Seconds())
+		if h.Logger != nil {
+			err := errors.New(w.Header().Get(ErrorHeader))
+			errReference := w.Header().Get(ReferenceHeader)
+			h.Logger.Info("served http request",
+				zap.String("handler", h.name),
+				zap.String("method", r.Method),
+				zap.String("path", r.URL.Path),
+				zap.Int("status", statusCode),
+				zap.Int("duration_ns", int(duration)),
+				zap.Error(err),
+				zap.String("reference", errReference),
+			)
+		}
 	}(time.Now())
 
 	switch {
@@ -85,25 +156,26 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, code int, res in
 	return json.NewEncoder(w).Encode(res)
 }
 
-func init() {
-	prometheus.MustRegister(httpCollectors...)
+// PrometheusCollectors satisifies prom.PrometheusCollector.
+func (h *Handler) PrometheusCollectors() []prometheus.Collector {
+	return []prometheus.Collector{
+		h.requests,
+		h.requestDur,
+	}
 }
 
-// namespace is the leading part of all published metrics for the http handler service.
-const namespace = "http"
+func (h *Handler) initMetrics() {
+	const namespace = "http"
+	const handlerSubsystem = "api"
 
-const handlerSubsystem = "api"
-
-// http metrics track request latency and count by path.
-var (
-	httpRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+	h.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: handlerSubsystem,
 		Name:      "requests_total",
 		Help:      "Number of http requests received",
 	}, []string{"handler", "method", "path", "status"})
 
-	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	h.requestDur = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Subsystem: handlerSubsystem,
 		Name:      "request_duration_seconds",
@@ -111,6 +183,15 @@ var (
 		// TODO(desa): determine what spacing these buckets should have.
 		Buckets: prometheus.ExponentialBuckets(0.001, 1.5, 25),
 	}, []string{"handler", "method", "path", "status"})
+}
 
-	httpCollectors = []prometheus.Collector{httpRequests, httpRequestDuration}
-)
+// InjectTrace writes any span from the request's context into the request headers.
+func InjectTrace(r *http.Request) {
+	if span := opentracing.SpanFromContext(r.Context()); span != nil {
+		span.Tracer().Inject(
+			span.Context(),
+			opentracing.HTTPHeaders,
+			opentracing.HTTPHeadersCarrier(r.Header),
+		)
+	}
+}

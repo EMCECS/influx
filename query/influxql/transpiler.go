@@ -1,3 +1,4 @@
+// Package influxql implements the transpiler for executing influxql queries in the 2.0 query engine.
 package influxql
 
 import (
@@ -8,22 +9,25 @@ import (
 	"time"
 
 	"github.com/influxdata/influxql"
+	"github.com/influxdata/platform"
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/functions"
 )
 
 // Transpiler converts InfluxQL queries into a query spec.
 type Transpiler struct {
-	Config *Config
+	Config         *Config
+	dbrpMappingSvc platform.DBRPMappingService
 }
 
-func NewTranspiler() *Transpiler {
-	return &Transpiler{}
+func NewTranspiler(dbrpMappingSvc platform.DBRPMappingService) *Transpiler {
+	return NewTranspilerWithConfig(dbrpMappingSvc, Config{})
 }
 
-func NewTranspilerWithConfig(cfg Config) *Transpiler {
+func NewTranspilerWithConfig(dbrpMappingSvc platform.DBRPMappingService, cfg Config) *Transpiler {
 	return &Transpiler{
-		Config: &cfg,
+		Config:         &cfg,
+		dbrpMappingSvc: dbrpMappingSvc,
 	}
 }
 
@@ -34,7 +38,7 @@ func (t *Transpiler) Transpile(ctx context.Context, txt string) (*query.Spec, er
 		return nil, err
 	}
 
-	transpiler := newTranspilerState(t.Config)
+	transpiler := newTranspilerState(t.dbrpMappingSvc, t.Config)
 	for i, s := range q.Statements {
 		stmt, ok := s.(*influxql.SelectStatement)
 		if !ok {
@@ -48,18 +52,19 @@ func (t *Transpiler) Transpile(ctx context.Context, txt string) (*query.Spec, er
 }
 
 type transpilerState struct {
-	id     int
-	stmt   *influxql.SelectStatement
-	config Config
-	spec   *query.Spec
-	nextID map[string]int
-	now    time.Time
+	id             int
+	stmt           *influxql.SelectStatement
+	config         Config
+	spec           *query.Spec
+	nextID         map[string]int
+	dbrpMappingSvc platform.DBRPMappingService
 }
 
-func newTranspilerState(config *Config) *transpilerState {
+func newTranspilerState(dbrpMappingSvc platform.DBRPMappingService, config *Config) *transpilerState {
 	state := &transpilerState{
-		spec:   &query.Spec{},
-		nextID: make(map[string]int),
+		spec:           &query.Spec{},
+		nextID:         make(map[string]int),
+		dbrpMappingSvc: dbrpMappingSvc,
 	}
 	if config != nil {
 		state.config = *config
@@ -69,7 +74,7 @@ func newTranspilerState(config *Config) *transpilerState {
 	}
 
 	// Stamp the current time using the now function from the config or the default.
-	state.now = state.config.NowFn()
+	state.spec.Now = state.config.NowFn()
 	return state
 }
 
@@ -79,9 +84,11 @@ func (t *transpilerState) Transpile(ctx context.Context, id int, stmt *influxql.
 	t.stmt.OmitTime = true
 	t.id = id
 
-	groups := identifyGroups(t.stmt)
-	if len(groups) == 0 {
-		return errors.New("no fields")
+	groups, err := identifyGroups(t.stmt)
+	if err != nil {
+		return err
+	} else if len(groups) == 0 {
+		return errors.New("at least 1 non-time field must be queried")
 	}
 
 	cursors := make([]cursor, 0, len(groups))
@@ -94,11 +101,14 @@ func (t *transpilerState) Transpile(ctx context.Context, id int, stmt *influxql.
 	}
 
 	// Join the cursors together on the measurement name.
-	// TODO(jsternberg): This needs to join on all remaining partition keys.
+	// TODO(jsternberg): This needs to join on all remaining group keys.
+	if len(cursors) > 1 {
+		return errors.New("unimplemented: joining multiple group cursors")
+	}
 	cur := Join(t, cursors, []string{"_measurement"}, nil)
 
 	// Map each of the fields into another cursor. This evaluates any lingering expressions.
-	cur, err := t.mapFields(cur)
+	cur, err = t.mapFields(cur)
 	if err != nil {
 		return err
 	}
@@ -126,13 +136,26 @@ func (t *transpilerState) from(m *influxql.Measurement) (query.OperationID, erro
 	if rp == "" {
 		if t.config.DefaultRetentionPolicy != "" {
 			rp = t.config.DefaultRetentionPolicy
-		} else {
-			rp = "autogen"
 		}
 	}
 
+	var filter platform.DBRPMappingFilter
+	filter.Cluster = &t.config.Cluster
+	if db != "" {
+		filter.Database = &db
+	}
+	if rp != "" {
+		filter.RetentionPolicy = &rp
+	}
+	defaultRP := rp == ""
+	filter.Default = &defaultRP
+	mapping, err := t.dbrpMappingSvc.Find(context.TODO(), filter)
+	if err != nil {
+		return "", err
+	}
+
 	spec := &functions.FromOpSpec{
-		Bucket: fmt.Sprintf("%s/%s", db, rp),
+		BucketID: mapping.BucketID,
 	}
 	return t.op("from", spec), nil
 }

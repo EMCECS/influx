@@ -7,27 +7,38 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gogo/protobuf/types"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	ostorage "github.com/influxdata/influxdb/services/storage"
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/functions/storage"
 	"github.com/influxdata/platform/query/values"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
 func NewReader(hl storage.HostLookup) (*reader, error) {
+	tracer := opentracing.GlobalTracer()
+
 	// TODO(nathanielc): Watch for host changes
 	hosts := hl.Hosts()
 	conns := make([]connection, len(hosts))
 	for i, h := range hosts {
-		conn, err := grpc.Dial(h, grpc.WithInsecure())
+		conn, err := grpc.Dial(
+			h,
+			grpc.WithInsecure(),
+			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer)),
+			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer)),
+		)
 		if err != nil {
 			return nil, err
 		}
 		conns[i] = connection{
 			host:   h,
 			conn:   conn,
-			client: NewStorageClient(conn),
+			client: ostorage.NewStorageClient(conn),
 		}
 	}
 	return &reader{
@@ -42,11 +53,11 @@ type reader struct {
 type connection struct {
 	host   string
 	conn   *grpc.ClientConn
-	client StorageClient
+	client ostorage.StorageClient
 }
 
-func (sr *reader) Read(ctx context.Context, trace map[string]string, readSpec storage.ReadSpec, start, stop execute.Time) (query.BlockIterator, error) {
-	var predicate *Predicate
+func (sr *reader) Read(ctx context.Context, readSpec storage.ReadSpec, start, stop execute.Time) (query.TableIterator, error) {
+	var predicate *ostorage.Predicate
 	if readSpec.Predicate != nil {
 		p, err := ToStoragePredicate(readSpec.Predicate)
 		if err != nil {
@@ -55,9 +66,8 @@ func (sr *reader) Read(ctx context.Context, trace map[string]string, readSpec st
 		predicate = p
 	}
 
-	bi := &blockIterator{
-		ctx:   ctx,
-		trace: trace,
+	bi := &tableIterator{
+		ctx: ctx,
 		bounds: execute.Bounds{
 			Start: start,
 			Stop:  stop,
@@ -75,19 +85,28 @@ func (sr *reader) Close() {
 	}
 }
 
-type blockIterator struct {
+type tableIterator struct {
 	ctx       context.Context
-	trace     map[string]string
 	bounds    execute.Bounds
 	conns     []connection
 	readSpec  storage.ReadSpec
-	predicate *Predicate
+	predicate *ostorage.Predicate
 }
 
-func (bi *blockIterator) Do(f func(query.Block) error) error {
+func (bi *tableIterator) Do(f func(query.Table) error) error {
+	src := ostorage.ReadSource{Database: string(bi.readSpec.BucketID)}
+	if i := strings.IndexByte(src.Database, '/'); i > -1 {
+		src.RetentionPolicy = src.Database[i+1:]
+		src.Database = src.Database[:i]
+	}
+
 	// Setup read request
-	var req ReadRequest
-	req.Database = string(bi.readSpec.BucketID)
+	var req ostorage.ReadRequest
+	if any, err := types.MarshalAny(&src); err != nil {
+		return err
+	} else {
+		req.ReadSource = any
+	}
 	req.Predicate = bi.predicate
 	req.Descending = bi.readSpec.Descending
 	req.TimestampRange.Start = int64(bi.bounds.Start)
@@ -97,7 +116,6 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 	req.SeriesLimit = bi.readSpec.SeriesLimit
 	req.PointsLimit = bi.readSpec.PointsLimit
 	req.SeriesOffset = bi.readSpec.SeriesOffset
-	req.Trace = bi.trace
 
 	if req.PointsLimit == -1 {
 		req.Hints.SetNoPoints()
@@ -105,10 +123,10 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 
 	if agg, err := determineAggregateMethod(bi.readSpec.AggregateMethod); err != nil {
 		return err
-	} else if agg != AggregateTypeNone {
-		req.Aggregate = &Aggregate{Type: agg}
+	} else if agg != ostorage.AggregateTypeNone {
+		req.Aggregate = &ostorage.Aggregate{Type: agg}
 	}
-	isGrouping := req.Group != GroupAll
+	isGrouping := req.Group != ostorage.GroupAll
 	streams := make([]*streamState, 0, len(bi.conns))
 
 	for i, c := range bi.conns {
@@ -170,38 +188,38 @@ func (bi *blockIterator) Do(f func(query.Block) error) error {
 	return bi.handleRead(f, ms)
 }
 
-func (bi *blockIterator) handleRead(f func(query.Block) error, ms *mergedStreams) error {
+func (bi *tableIterator) handleRead(f func(query.Table) error, ms *mergedStreams) error {
 	for ms.more() {
 		if p := ms.peek(); readFrameType(p) != seriesType {
-			//This means the consumer didn't read all the data off the block
+			//This means the consumer didn't read all the data off the table
 			return errors.New("internal error: short read")
 		}
 		frame := ms.next()
 		s := frame.GetSeries()
 		typ := convertDataType(s.DataType)
-		key := partitionKeyForSeries(s, &bi.readSpec, bi.bounds)
-		cols, defs := determineBlockColsForSeries(s, typ)
-		block := newBlock(bi.bounds, key, cols, ms, &bi.readSpec, s.Tags, defs)
+		key := groupKeyForSeries(s, &bi.readSpec, bi.bounds)
+		cols, defs := determineTableColsForSeries(s, typ)
+		table := newTable(bi.bounds, key, cols, ms, &bi.readSpec, s.Tags, defs)
 
-		if err := f(block); err != nil {
+		if err := f(table); err != nil {
 			// TODO(nathanielc): Close streams since we have abandoned the request
 			return err
 		}
-		// Wait until the block has been read.
-		block.wait()
+		// Wait until the table has been read.
+		table.wait()
 	}
 	return nil
 }
 
-func (bi *blockIterator) handleGroupRead(f func(query.Block) error, ms *mergedStreams) error {
+func (bi *tableIterator) handleGroupRead(f func(query.Table) error, ms *mergedStreams) error {
 	for ms.more() {
 		if p := ms.peek(); readFrameType(p) != groupType {
-			//This means the consumer didn't read all the data off the block
+			//This means the consumer didn't read all the data off the table
 			return errors.New("internal error: short read")
 		}
 		frame := ms.next()
 		s := frame.GetGroup()
-		key := partitionKeyForGroup(s, &bi.readSpec, bi.bounds)
+		key := groupKeyForGroup(s, &bi.readSpec, bi.bounds)
 
 		// try to infer type
 		// TODO(sgc): this is a hack
@@ -209,58 +227,58 @@ func (bi *blockIterator) handleGroupRead(f func(query.Block) error, ms *mergedSt
 		if p := ms.peek(); readFrameType(p) == seriesType {
 			typ = convertDataType(p.GetSeries().DataType)
 		}
-		cols, defs := determineBlockColsForGroup(s, typ)
+		cols, defs := determineTableColsForGroup(s, typ)
 
-		block := newBlock(bi.bounds, key, cols, ms, &bi.readSpec, nil, defs)
+		table := newTable(bi.bounds, key, cols, ms, &bi.readSpec, nil, defs)
 
-		if err := f(block); err != nil {
+		if err := f(table); err != nil {
 			// TODO(nathanielc): Close streams since we have abandoned the request
 			return err
 		}
-		// Wait until the block has been read.
-		block.wait()
+		// Wait until the table has been read.
+		table.wait()
 	}
 	return nil
 }
 
-func determineAggregateMethod(agg string) (Aggregate_AggregateType, error) {
+func determineAggregateMethod(agg string) (ostorage.Aggregate_AggregateType, error) {
 	if agg == "" {
-		return AggregateTypeNone, nil
+		return ostorage.AggregateTypeNone, nil
 	}
 
-	if t, ok := Aggregate_AggregateType_value[strings.ToUpper(agg)]; ok {
-		return Aggregate_AggregateType(t), nil
+	if t, ok := ostorage.Aggregate_AggregateType_value[strings.ToUpper(agg)]; ok {
+		return ostorage.Aggregate_AggregateType(t), nil
 	}
 	return 0, fmt.Errorf("unknown aggregate type %q", agg)
 }
 
-func convertGroupMode(m storage.GroupMode) ReadRequest_Group {
+func convertGroupMode(m storage.GroupMode) ostorage.ReadRequest_Group {
 	switch m {
 	case storage.GroupModeNone:
-		return GroupNone
+		return ostorage.GroupNone
 	case storage.GroupModeBy:
-		return GroupBy
+		return ostorage.GroupBy
 	case storage.GroupModeExcept:
-		return GroupExcept
+		return ostorage.GroupExcept
 
 	case storage.GroupModeDefault, storage.GroupModeAll:
 		fallthrough
 	default:
-		return GroupAll
+		return ostorage.GroupAll
 	}
 }
 
-func convertDataType(t ReadResponse_DataType) query.DataType {
+func convertDataType(t ostorage.ReadResponse_DataType) query.DataType {
 	switch t {
-	case DataTypeFloat:
+	case ostorage.DataTypeFloat:
 		return query.TFloat
-	case DataTypeInteger:
+	case ostorage.DataTypeInteger:
 		return query.TInt
-	case DataTypeUnsigned:
+	case ostorage.DataTypeUnsigned:
 		return query.TUInt
-	case DataTypeBoolean:
+	case ostorage.DataTypeBoolean:
 		return query.TBool
-	case DataTypeString:
+	case ostorage.DataTypeString:
 		return query.TString
 	default:
 		return query.TInvalid
@@ -274,7 +292,7 @@ const (
 	valueColIdx = 3
 )
 
-func determineBlockColsForSeries(s *ReadResponse_SeriesFrame, typ query.DataType) ([]query.ColMeta, [][]byte) {
+func determineTableColsForSeries(s *ostorage.ReadResponse_SeriesFrame, typ query.DataType) ([]query.ColMeta, [][]byte) {
 	cols := make([]query.ColMeta, 4+len(s.Tags))
 	defs := make([][]byte, 4+len(s.Tags))
 	cols[startColIdx] = query.ColMeta{
@@ -303,7 +321,7 @@ func determineBlockColsForSeries(s *ReadResponse_SeriesFrame, typ query.DataType
 	return cols, defs
 }
 
-func partitionKeyForSeries(s *ReadResponse_SeriesFrame, readSpec *storage.ReadSpec, bnds execute.Bounds) query.PartitionKey {
+func groupKeyForSeries(s *ostorage.ReadResponse_SeriesFrame, readSpec *storage.ReadSpec, bnds execute.Bounds) query.GroupKey {
 	cols := make([]query.ColMeta, 2, len(s.Tags))
 	vs := make([]values.Value, 2, len(s.Tags))
 	cols[0] = query.ColMeta{
@@ -318,7 +336,7 @@ func partitionKeyForSeries(s *ReadResponse_SeriesFrame, readSpec *storage.ReadSp
 	vs[1] = values.NewTimeValue(bnds.Stop)
 	switch readSpec.GroupMode {
 	case storage.GroupModeBy:
-		// partition key in GroupKeys order, including tags in the GroupKeys slice
+		// group key in GroupKeys order, including tags in the GroupKeys slice
 		for _, k := range readSpec.GroupKeys {
 			if i := indexOfTag(s.Tags, k); i < len(s.Tags) {
 				cols = append(cols, query.ColMeta{
@@ -329,7 +347,7 @@ func partitionKeyForSeries(s *ReadResponse_SeriesFrame, readSpec *storage.ReadSp
 			}
 		}
 	case storage.GroupModeExcept:
-		// partition key in GroupKeys order, skipping tags in the GroupKeys slice
+		// group key in GroupKeys order, skipping tags in the GroupKeys slice
 		for _, k := range readSpec.GroupKeys {
 			if i := indexOfTag(s.Tags, k); i == len(s.Tags) {
 				cols = append(cols, query.ColMeta{
@@ -348,10 +366,10 @@ func partitionKeyForSeries(s *ReadResponse_SeriesFrame, readSpec *storage.ReadSp
 			vs = append(vs, values.NewStringValue(string(s.Tags[i].Value)))
 		}
 	}
-	return execute.NewPartitionKey(cols, vs)
+	return execute.NewGroupKey(cols, vs)
 }
 
-func determineBlockColsForGroup(f *ReadResponse_GroupFrame, typ query.DataType) ([]query.ColMeta, [][]byte) {
+func determineTableColsForGroup(f *ostorage.ReadResponse_GroupFrame, typ query.DataType) ([]query.ColMeta, [][]byte) {
 	cols := make([]query.ColMeta, 4+len(f.TagKeys))
 	defs := make([][]byte, 4+len(f.TagKeys))
 	cols[startColIdx] = query.ColMeta{
@@ -381,7 +399,7 @@ func determineBlockColsForGroup(f *ReadResponse_GroupFrame, typ query.DataType) 
 	return cols, defs
 }
 
-func partitionKeyForGroup(g *ReadResponse_GroupFrame, readSpec *storage.ReadSpec, bnds execute.Bounds) query.PartitionKey {
+func groupKeyForGroup(g *ostorage.ReadResponse_GroupFrame, readSpec *storage.ReadSpec, bnds execute.Bounds) query.GroupKey {
 	cols := make([]query.ColMeta, 2, len(readSpec.GroupKeys)+2)
 	vs := make([]values.Value, 2, len(readSpec.GroupKeys)+2)
 	cols[0] = query.ColMeta{
@@ -401,14 +419,14 @@ func partitionKeyForGroup(g *ReadResponse_GroupFrame, readSpec *storage.ReadSpec
 		})
 		vs = append(vs, values.NewStringValue(string(g.PartitionKeyVals[i])))
 	}
-	return execute.NewPartitionKey(cols, vs)
+	return execute.NewGroupKey(cols, vs)
 }
 
-// block implement OneTimeBlock as it can only be read once.
+// table implement OneTimeTable as it can only be read once.
 // Since it can only be read once it is also a ValueIterator for itself.
-type block struct {
+type table struct {
 	bounds execute.Bounds
-	key    query.PartitionKey
+	key    query.GroupKey
 	cols   []query.ColMeta
 
 	empty bool
@@ -443,16 +461,16 @@ type block struct {
 	err error
 }
 
-func newBlock(
+func newTable(
 	bounds execute.Bounds,
-	key query.PartitionKey,
+	key query.GroupKey,
 	cols []query.ColMeta,
 	ms *mergedStreams,
 	readSpec *storage.ReadSpec,
-	tags []Tag,
+	tags []ostorage.Tag,
 	defs [][]byte,
-) *block {
-	b := &block{
+) *table {
+	b := &table{
 		bounds:   bounds,
 		key:      key,
 		tags:     make([][]byte, len(cols)),
@@ -470,283 +488,283 @@ func newBlock(
 	return b
 }
 
-func (b *block) RefCount(n int) {
-	//TODO(nathanielc): Have the storageBlock consume the Allocator,
+func (t *table) RefCount(n int) {
+	//TODO(nathanielc): Have the table consume the Allocator,
 	// once we have zero-copy serialization over the network
 }
 
-func (b *block) Err() error { return b.err }
+func (t *table) Err() error { return t.err }
 
-func (b *block) wait() {
-	<-b.done
+func (t *table) wait() {
+	<-t.done
 }
 
-func (b *block) Key() query.PartitionKey {
-	return b.key
+func (t *table) Key() query.GroupKey {
+	return t.key
 }
-func (b *block) Cols() []query.ColMeta {
-	return b.cols
+func (t *table) Cols() []query.ColMeta {
+	return t.cols
 }
 
-// onetime satisfies the OneTimeBlock interface since this block may only be read once.
-func (b *block) onetime() {}
-func (b *block) Do(f func(query.ColReader) error) error {
-	defer close(b.done)
+// onetime satisfies the OneTimeTable interface since this table may only be read once.
+func (t *table) onetime() {}
+func (t *table) Do(f func(query.ColReader) error) error {
+	defer close(t.done)
 	// If the initial advance call indicated we are done, return immediately
-	if !b.more {
-		return b.err
+	if !t.more {
+		return t.err
 	}
 
-	f(b)
-	for b.advance() {
-		if err := f(b); err != nil {
+	f(t)
+	for t.advance() {
+		if err := f(t); err != nil {
 			return err
 		}
 	}
-	return b.err
+	return t.err
 }
 
-func (b *block) Len() int {
-	return b.l
+func (t *table) Len() int {
+	return t.l
 }
 
-func (b *block) Bools(j int) []bool {
-	execute.CheckColType(b.cols[j], query.TBool)
-	return b.colBufs[j].([]bool)
+func (t *table) Bools(j int) []bool {
+	execute.CheckColType(t.cols[j], query.TBool)
+	return t.colBufs[j].([]bool)
 }
-func (b *block) Ints(j int) []int64 {
-	execute.CheckColType(b.cols[j], query.TInt)
-	return b.colBufs[j].([]int64)
+func (t *table) Ints(j int) []int64 {
+	execute.CheckColType(t.cols[j], query.TInt)
+	return t.colBufs[j].([]int64)
 }
-func (b *block) UInts(j int) []uint64 {
-	execute.CheckColType(b.cols[j], query.TUInt)
-	return b.colBufs[j].([]uint64)
+func (t *table) UInts(j int) []uint64 {
+	execute.CheckColType(t.cols[j], query.TUInt)
+	return t.colBufs[j].([]uint64)
 }
-func (b *block) Floats(j int) []float64 {
-	execute.CheckColType(b.cols[j], query.TFloat)
-	return b.colBufs[j].([]float64)
+func (t *table) Floats(j int) []float64 {
+	execute.CheckColType(t.cols[j], query.TFloat)
+	return t.colBufs[j].([]float64)
 }
-func (b *block) Strings(j int) []string {
-	execute.CheckColType(b.cols[j], query.TString)
-	return b.colBufs[j].([]string)
+func (t *table) Strings(j int) []string {
+	execute.CheckColType(t.cols[j], query.TString)
+	return t.colBufs[j].([]string)
 }
-func (b *block) Times(j int) []execute.Time {
-	execute.CheckColType(b.cols[j], query.TTime)
-	return b.colBufs[j].([]execute.Time)
+func (t *table) Times(j int) []execute.Time {
+	execute.CheckColType(t.cols[j], query.TTime)
+	return t.colBufs[j].([]execute.Time)
 }
 
 // readTags populates b.tags with the provided tags
-func (b *block) readTags(tags []Tag) {
-	for j := range b.tags {
-		b.tags[j] = b.defs[j]
+func (t *table) readTags(tags []ostorage.Tag) {
+	for j := range t.tags {
+		t.tags[j] = t.defs[j]
 	}
 
 	if len(tags) == 0 {
 		return
 	}
 
-	for _, t := range tags {
-		k := string(t.Key)
-		j := execute.ColIdx(k, b.cols)
-		b.tags[j] = t.Value
+	for _, tag := range tags {
+		k := string(tag.Key)
+		j := execute.ColIdx(k, t.cols)
+		t.tags[j] = tag.Value
 	}
 }
 
-func (b *block) advance() bool {
-	for b.ms.more() {
+func (t *table) advance() bool {
+	for t.ms.more() {
 		//reset buffers
-		b.timeBuf = b.timeBuf[0:0]
-		b.boolBuf = b.boolBuf[0:0]
-		b.intBuf = b.intBuf[0:0]
-		b.uintBuf = b.uintBuf[0:0]
-		b.stringBuf = b.stringBuf[0:0]
-		b.floatBuf = b.floatBuf[0:0]
+		t.timeBuf = t.timeBuf[0:0]
+		t.boolBuf = t.boolBuf[0:0]
+		t.intBuf = t.intBuf[0:0]
+		t.uintBuf = t.uintBuf[0:0]
+		t.stringBuf = t.stringBuf[0:0]
+		t.floatBuf = t.floatBuf[0:0]
 
-		switch p := b.ms.peek(); readFrameType(p) {
+		switch p := t.ms.peek(); readFrameType(p) {
 		case groupType:
 			return false
 		case seriesType:
-			if !b.ms.key().Equal(b.key) {
-				// We have reached the end of data for this block
+			if !t.ms.key().Equal(t.key) {
+				// We have reached the end of data for this table
 				return false
 			}
 			s := p.GetSeries()
-			b.readTags(s.Tags)
+			t.readTags(s.Tags)
 
 			// Advance to next frame
-			b.ms.next()
+			t.ms.next()
 
-			if b.readSpec.PointsLimit == -1 {
+			if t.readSpec.PointsLimit == -1 {
 				// do not expect points frames
-				b.l = 0
+				t.l = 0
 				return true
 			}
 		case boolPointsType:
-			if b.cols[valueColIdx].Type != query.TBool {
-				b.err = fmt.Errorf("value type changed from %s -> %s", b.cols[valueColIdx].Type, query.TBool)
+			if t.cols[valueColIdx].Type != query.TBool {
+				t.err = fmt.Errorf("value type changed from %s -> %s", t.cols[valueColIdx].Type, query.TBool)
 				// TODO: Add error handling
 				// Type changed,
 				return false
 			}
-			b.empty = false
+			t.empty = false
 			// read next frame
-			frame := b.ms.next()
+			frame := t.ms.next()
 			p := frame.GetBooleanPoints()
 			l := len(p.Timestamps)
-			b.l = l
-			if l > cap(b.timeBuf) {
-				b.timeBuf = make([]execute.Time, l)
+			t.l = l
+			if l > cap(t.timeBuf) {
+				t.timeBuf = make([]execute.Time, l)
 			} else {
-				b.timeBuf = b.timeBuf[:l]
+				t.timeBuf = t.timeBuf[:l]
 			}
-			if l > cap(b.boolBuf) {
-				b.boolBuf = make([]bool, l)
+			if l > cap(t.boolBuf) {
+				t.boolBuf = make([]bool, l)
 			} else {
-				b.boolBuf = b.boolBuf[:l]
+				t.boolBuf = t.boolBuf[:l]
 			}
 
 			for i, c := range p.Timestamps {
-				b.timeBuf[i] = execute.Time(c)
-				b.boolBuf[i] = p.Values[i]
+				t.timeBuf[i] = execute.Time(c)
+				t.boolBuf[i] = p.Values[i]
 			}
-			b.colBufs[timeColIdx] = b.timeBuf
-			b.colBufs[valueColIdx] = b.boolBuf
-			b.appendTags()
-			b.appendBounds()
+			t.colBufs[timeColIdx] = t.timeBuf
+			t.colBufs[valueColIdx] = t.boolBuf
+			t.appendTags()
+			t.appendBounds()
 			return true
 		case intPointsType:
-			if b.cols[valueColIdx].Type != query.TInt {
-				b.err = fmt.Errorf("value type changed from %s -> %s", b.cols[valueColIdx].Type, query.TInt)
+			if t.cols[valueColIdx].Type != query.TInt {
+				t.err = fmt.Errorf("value type changed from %s -> %s", t.cols[valueColIdx].Type, query.TInt)
 				// TODO: Add error handling
 				// Type changed,
 				return false
 			}
-			b.empty = false
+			t.empty = false
 			// read next frame
-			frame := b.ms.next()
+			frame := t.ms.next()
 			p := frame.GetIntegerPoints()
 			l := len(p.Timestamps)
-			b.l = l
-			if l > cap(b.timeBuf) {
-				b.timeBuf = make([]execute.Time, l)
+			t.l = l
+			if l > cap(t.timeBuf) {
+				t.timeBuf = make([]execute.Time, l)
 			} else {
-				b.timeBuf = b.timeBuf[:l]
+				t.timeBuf = t.timeBuf[:l]
 			}
-			if l > cap(b.uintBuf) {
-				b.intBuf = make([]int64, l)
+			if l > cap(t.uintBuf) {
+				t.intBuf = make([]int64, l)
 			} else {
-				b.intBuf = b.intBuf[:l]
+				t.intBuf = t.intBuf[:l]
 			}
 
 			for i, c := range p.Timestamps {
-				b.timeBuf[i] = execute.Time(c)
-				b.intBuf[i] = p.Values[i]
+				t.timeBuf[i] = execute.Time(c)
+				t.intBuf[i] = p.Values[i]
 			}
-			b.colBufs[timeColIdx] = b.timeBuf
-			b.colBufs[valueColIdx] = b.intBuf
-			b.appendTags()
-			b.appendBounds()
+			t.colBufs[timeColIdx] = t.timeBuf
+			t.colBufs[valueColIdx] = t.intBuf
+			t.appendTags()
+			t.appendBounds()
 			return true
 		case uintPointsType:
-			if b.cols[valueColIdx].Type != query.TUInt {
-				b.err = fmt.Errorf("value type changed from %s -> %s", b.cols[valueColIdx].Type, query.TUInt)
+			if t.cols[valueColIdx].Type != query.TUInt {
+				t.err = fmt.Errorf("value type changed from %s -> %s", t.cols[valueColIdx].Type, query.TUInt)
 				// TODO: Add error handling
 				// Type changed,
 				return false
 			}
-			b.empty = false
+			t.empty = false
 			// read next frame
-			frame := b.ms.next()
+			frame := t.ms.next()
 			p := frame.GetUnsignedPoints()
 			l := len(p.Timestamps)
-			b.l = l
-			if l > cap(b.timeBuf) {
-				b.timeBuf = make([]execute.Time, l)
+			t.l = l
+			if l > cap(t.timeBuf) {
+				t.timeBuf = make([]execute.Time, l)
 			} else {
-				b.timeBuf = b.timeBuf[:l]
+				t.timeBuf = t.timeBuf[:l]
 			}
-			if l > cap(b.intBuf) {
-				b.uintBuf = make([]uint64, l)
+			if l > cap(t.intBuf) {
+				t.uintBuf = make([]uint64, l)
 			} else {
-				b.uintBuf = b.uintBuf[:l]
+				t.uintBuf = t.uintBuf[:l]
 			}
 
 			for i, c := range p.Timestamps {
-				b.timeBuf[i] = execute.Time(c)
-				b.uintBuf[i] = p.Values[i]
+				t.timeBuf[i] = execute.Time(c)
+				t.uintBuf[i] = p.Values[i]
 			}
-			b.colBufs[timeColIdx] = b.timeBuf
-			b.colBufs[valueColIdx] = b.uintBuf
-			b.appendTags()
-			b.appendBounds()
+			t.colBufs[timeColIdx] = t.timeBuf
+			t.colBufs[valueColIdx] = t.uintBuf
+			t.appendTags()
+			t.appendBounds()
 			return true
 		case floatPointsType:
-			if b.cols[valueColIdx].Type != query.TFloat {
-				b.err = fmt.Errorf("value type changed from %s -> %s", b.cols[valueColIdx].Type, query.TFloat)
+			if t.cols[valueColIdx].Type != query.TFloat {
+				t.err = fmt.Errorf("value type changed from %s -> %s", t.cols[valueColIdx].Type, query.TFloat)
 				// TODO: Add error handling
 				// Type changed,
 				return false
 			}
-			b.empty = false
+			t.empty = false
 			// read next frame
-			frame := b.ms.next()
+			frame := t.ms.next()
 			p := frame.GetFloatPoints()
 
 			l := len(p.Timestamps)
-			b.l = l
-			if l > cap(b.timeBuf) {
-				b.timeBuf = make([]execute.Time, l)
+			t.l = l
+			if l > cap(t.timeBuf) {
+				t.timeBuf = make([]execute.Time, l)
 			} else {
-				b.timeBuf = b.timeBuf[:l]
+				t.timeBuf = t.timeBuf[:l]
 			}
-			if l > cap(b.floatBuf) {
-				b.floatBuf = make([]float64, l)
+			if l > cap(t.floatBuf) {
+				t.floatBuf = make([]float64, l)
 			} else {
-				b.floatBuf = b.floatBuf[:l]
+				t.floatBuf = t.floatBuf[:l]
 			}
 
 			for i, c := range p.Timestamps {
-				b.timeBuf[i] = execute.Time(c)
-				b.floatBuf[i] = p.Values[i]
+				t.timeBuf[i] = execute.Time(c)
+				t.floatBuf[i] = p.Values[i]
 			}
-			b.colBufs[timeColIdx] = b.timeBuf
-			b.colBufs[valueColIdx] = b.floatBuf
-			b.appendTags()
-			b.appendBounds()
+			t.colBufs[timeColIdx] = t.timeBuf
+			t.colBufs[valueColIdx] = t.floatBuf
+			t.appendTags()
+			t.appendBounds()
 			return true
 		case stringPointsType:
-			if b.cols[valueColIdx].Type != query.TString {
-				b.err = fmt.Errorf("value type changed from %s -> %s", b.cols[valueColIdx].Type, query.TString)
+			if t.cols[valueColIdx].Type != query.TString {
+				t.err = fmt.Errorf("value type changed from %s -> %s", t.cols[valueColIdx].Type, query.TString)
 				// TODO: Add error handling
 				// Type changed,
 				return false
 			}
-			b.empty = false
+			t.empty = false
 			// read next frame
-			frame := b.ms.next()
+			frame := t.ms.next()
 			p := frame.GetStringPoints()
 
 			l := len(p.Timestamps)
-			b.l = l
-			if l > cap(b.timeBuf) {
-				b.timeBuf = make([]execute.Time, l)
+			t.l = l
+			if l > cap(t.timeBuf) {
+				t.timeBuf = make([]execute.Time, l)
 			} else {
-				b.timeBuf = b.timeBuf[:l]
+				t.timeBuf = t.timeBuf[:l]
 			}
-			if l > cap(b.stringBuf) {
-				b.stringBuf = make([]string, l)
+			if l > cap(t.stringBuf) {
+				t.stringBuf = make([]string, l)
 			} else {
-				b.stringBuf = b.stringBuf[:l]
+				t.stringBuf = t.stringBuf[:l]
 			}
 
 			for i, c := range p.Timestamps {
-				b.timeBuf[i] = execute.Time(c)
-				b.stringBuf[i] = p.Values[i]
+				t.timeBuf[i] = execute.Time(c)
+				t.stringBuf[i] = p.Values[i]
 			}
-			b.colBufs[timeColIdx] = b.timeBuf
-			b.colBufs[valueColIdx] = b.stringBuf
-			b.appendTags()
-			b.appendBounds()
+			t.colBufs[timeColIdx] = t.timeBuf
+			t.colBufs[valueColIdx] = t.stringBuf
+			t.appendTags()
+			t.appendBounds()
 			return true
 		}
 	}
@@ -754,63 +772,63 @@ func (b *block) advance() bool {
 }
 
 // appendTags fills the colBufs for the tag columns with the tag value.
-func (b *block) appendTags() {
-	for j := range b.cols {
-		v := b.tags[j]
+func (t *table) appendTags() {
+	for j := range t.cols {
+		v := t.tags[j]
 		if v != nil {
-			if b.colBufs[j] == nil {
-				b.colBufs[j] = make([]string, b.l)
+			if t.colBufs[j] == nil {
+				t.colBufs[j] = make([]string, t.l)
 			}
-			colBuf := b.colBufs[j].([]string)
-			if cap(colBuf) < b.l {
-				colBuf = make([]string, b.l)
+			colBuf := t.colBufs[j].([]string)
+			if cap(colBuf) < t.l {
+				colBuf = make([]string, t.l)
 			} else {
-				colBuf = colBuf[:b.l]
+				colBuf = colBuf[:t.l]
 			}
 			vStr := string(v)
 			for i := range colBuf {
 				colBuf[i] = vStr
 			}
-			b.colBufs[j] = colBuf
+			t.colBufs[j] = colBuf
 		}
 	}
 }
 
 // appendBounds fills the colBufs for the time bounds
-func (b *block) appendBounds() {
-	bounds := []execute.Time{b.bounds.Start, b.bounds.Stop}
+func (t *table) appendBounds() {
+	bounds := []execute.Time{t.bounds.Start, t.bounds.Stop}
 	for j := range []int{startColIdx, stopColIdx} {
-		if b.colBufs[j] == nil {
-			b.colBufs[j] = make([]execute.Time, b.l)
+		if t.colBufs[j] == nil {
+			t.colBufs[j] = make([]execute.Time, t.l)
 		}
-		colBuf := b.colBufs[j].([]execute.Time)
-		if cap(colBuf) < b.l {
-			colBuf = make([]execute.Time, b.l)
+		colBuf := t.colBufs[j].([]execute.Time)
+		if cap(colBuf) < t.l {
+			colBuf = make([]execute.Time, t.l)
 		} else {
-			colBuf = colBuf[:b.l]
+			colBuf = colBuf[:t.l]
 		}
 		for i := range colBuf {
 			colBuf[i] = bounds[j]
 		}
-		b.colBufs[j] = colBuf
+		t.colBufs[j] = colBuf
 	}
 }
 
-func (b *block) Empty() bool {
-	return b.empty
+func (t *table) Empty() bool {
+	return t.empty
 }
 
 type streamState struct {
 	bounds     execute.Bounds
-	stream     Storage_ReadClient
-	rep        ReadResponse
-	currentKey query.PartitionKey
+	stream     ostorage.Storage_ReadClient
+	rep        ostorage.ReadResponse
+	currentKey query.GroupKey
 	readSpec   *storage.ReadSpec
 	finished   bool
 	group      bool
 }
 
-func (s *streamState) peek() ReadResponse_Frame {
+func (s *streamState) peek() ostorage.ReadResponse_Frame {
 	return s.rep.Frames[0]
 }
 
@@ -837,7 +855,7 @@ func (s *streamState) more() bool {
 	return true
 }
 
-func (s *streamState) key() query.PartitionKey {
+func (s *streamState) key() query.GroupKey {
 	return s.currentKey
 }
 
@@ -848,17 +866,17 @@ func (s *streamState) computeKey() {
 	if s.group {
 		if ft == groupType {
 			group := p.GetGroup()
-			s.currentKey = partitionKeyForGroup(group, s.readSpec, s.bounds)
+			s.currentKey = groupKeyForGroup(group, s.readSpec, s.bounds)
 		}
 	} else {
 		if ft == seriesType {
 			series := p.GetSeries()
-			s.currentKey = partitionKeyForSeries(series, s.readSpec, s.bounds)
+			s.currentKey = groupKeyForSeries(series, s.readSpec, s.bounds)
 		}
 	}
 }
 
-func (s *streamState) next() ReadResponse_Frame {
+func (s *streamState) next() ostorage.ReadResponse_Frame {
 	frame := s.rep.Frames[0]
 	s.rep.Frames = s.rep.Frames[1:]
 	if len(s.rep.Frames) > 0 {
@@ -869,21 +887,21 @@ func (s *streamState) next() ReadResponse_Frame {
 
 type mergedStreams struct {
 	streams    []*streamState
-	currentKey query.PartitionKey
+	currentKey query.GroupKey
 	i          int
 }
 
-func (s *mergedStreams) key() query.PartitionKey {
+func (s *mergedStreams) key() query.GroupKey {
 	if len(s.streams) == 1 {
 		return s.streams[0].key()
 	}
 	return s.currentKey
 }
-func (s *mergedStreams) peek() ReadResponse_Frame {
+func (s *mergedStreams) peek() ostorage.ReadResponse_Frame {
 	return s.streams[s.i].peek()
 }
 
-func (s *mergedStreams) next() ReadResponse_Frame {
+func (s *mergedStreams) next() ostorage.ReadResponse_Frame {
 	return s.streams[s.i].next()
 }
 
@@ -920,7 +938,7 @@ func (s *mergedStreams) advance() bool {
 
 func (s *mergedStreams) determineNewKey() bool {
 	minIdx := -1
-	var minKey query.PartitionKey
+	var minKey query.GroupKey
 	for i, stream := range s.streams {
 		if !stream.more() {
 			continue
@@ -948,27 +966,27 @@ const (
 	stringPointsType
 )
 
-func readFrameType(frame ReadResponse_Frame) frameType {
+func readFrameType(frame ostorage.ReadResponse_Frame) frameType {
 	switch frame.Data.(type) {
-	case *ReadResponse_Frame_Series:
+	case *ostorage.ReadResponse_Frame_Series:
 		return seriesType
-	case *ReadResponse_Frame_Group:
+	case *ostorage.ReadResponse_Frame_Group:
 		return groupType
-	case *ReadResponse_Frame_BooleanPoints:
+	case *ostorage.ReadResponse_Frame_BooleanPoints:
 		return boolPointsType
-	case *ReadResponse_Frame_IntegerPoints:
+	case *ostorage.ReadResponse_Frame_IntegerPoints:
 		return intPointsType
-	case *ReadResponse_Frame_UnsignedPoints:
+	case *ostorage.ReadResponse_Frame_UnsignedPoints:
 		return uintPointsType
-	case *ReadResponse_Frame_FloatPoints:
+	case *ostorage.ReadResponse_Frame_FloatPoints:
 		return floatPointsType
-	case *ReadResponse_Frame_StringPoints:
+	case *ostorage.ReadResponse_Frame_StringPoints:
 		return stringPointsType
 	default:
 		panic(fmt.Errorf("unknown read response frame type: %T", frame.Data))
 	}
 }
 
-func indexOfTag(t []Tag, k string) int {
+func indexOfTag(t []ostorage.Tag, k string) int {
 	return sort.Search(len(t), func(i int) bool { return string(t[i].Key) >= k })
 }

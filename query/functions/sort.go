@@ -22,6 +22,7 @@ var sortSignature = query.DefaultFunctionSignature()
 
 func init() {
 	sortSignature.Params["cols"] = semantic.NewArrayType(semantic.String)
+	sortSignature.Params["desc"] = semantic.Bool
 
 	query.RegisterFunction(SortKind, createSortOpSpec, sortSignature)
 	query.RegisterOpSpec(SortKind, newSortOp)
@@ -100,7 +101,7 @@ func createSortTransformation(id execute.DatasetID, mode execute.AccumulationMod
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", spec)
 	}
-	cache := execute.NewBlockBuilderCache(a.Allocator())
+	cache := execute.NewTableBuilderCache(a.Allocator())
 	d := execute.NewDataset(id, mode, cache)
 	t := NewSortTransformation(d, cache, s)
 	return t, d, nil
@@ -108,15 +109,13 @@ func createSortTransformation(id execute.DatasetID, mode execute.AccumulationMod
 
 type sortTransformation struct {
 	d     execute.Dataset
-	cache execute.BlockBuilderCache
+	cache execute.TableBuilderCache
 
 	cols []string
 	desc bool
-
-	colMap []int
 }
 
-func NewSortTransformation(d execute.Dataset, cache execute.BlockBuilderCache, spec *SortProcedureSpec) *sortTransformation {
+func NewSortTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *SortProcedureSpec) *sortTransformation {
 	return &sortTransformation{
 		d:     d,
 		cache: cache,
@@ -125,12 +124,12 @@ func NewSortTransformation(d execute.Dataset, cache execute.BlockBuilderCache, s
 	}
 }
 
-func (t *sortTransformation) RetractBlock(id execute.DatasetID, key query.PartitionKey) error {
-	return t.d.RetractBlock(key)
+func (t *sortTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+	return t.d.RetractTable(key)
 }
 
-func (t *sortTransformation) Process(id execute.DatasetID, b query.Block) error {
-	key := b.Key()
+func (t *sortTransformation) Process(id execute.DatasetID, tbl query.Table) error {
+	key := tbl.Key()
 	for _, label := range t.cols {
 		if key.HasCol(label) {
 			key = t.sortedKey(key)
@@ -138,23 +137,12 @@ func (t *sortTransformation) Process(id execute.DatasetID, b query.Block) error 
 		}
 	}
 
-	builder, created := t.cache.BlockBuilder(key)
+	builder, created := t.cache.TableBuilder(key)
 	if !created {
-		return fmt.Errorf("sort found duplicate block with key: %v", b.Key())
+		return fmt.Errorf("sort found duplicate table with key: %v", tbl.Key())
 	}
-	execute.AddBlockCols(b, builder)
-
-	ncols := builder.NCols()
-	if cap(t.colMap) < ncols {
-		t.colMap = make([]int, ncols)
-		for j := range t.colMap {
-			t.colMap[j] = j
-		}
-	} else {
-		t.colMap = t.colMap[:ncols]
-	}
-
-	execute.AppendBlock(b, builder, t.colMap)
+	execute.AddTableCols(tbl, builder)
+	execute.AppendTable(tbl, builder)
 
 	builder.Sort(t.cols, t.desc)
 	return nil
@@ -170,7 +158,7 @@ func (t *sortTransformation) Finish(id execute.DatasetID, err error) {
 	t.d.Finish(err)
 }
 
-func (t *sortTransformation) sortedKey(key query.PartitionKey) query.PartitionKey {
+func (t *sortTransformation) sortedKey(key query.GroupKey) query.GroupKey {
 	cols := make([]query.ColMeta, len(key.Cols()))
 	vs := make([]values.Value, len(key.Cols()))
 	j := 0
@@ -189,5 +177,5 @@ func (t *sortTransformation) sortedKey(key query.PartitionKey) query.PartitionKe
 			j++
 		}
 	}
-	return execute.NewPartitionKey(cols, vs)
+	return execute.NewGroupKey(cols, vs)
 }

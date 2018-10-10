@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/influxdata/platform/query/values"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/functions"
@@ -13,6 +15,7 @@ import (
 )
 
 func TestPhysicalPlanner_Plan(t *testing.T) {
+	now := time.Date(2017, 8, 8, 0, 0, 0, 0, time.UTC)
 	testCases := []struct {
 		name string
 		lp   *plan.LogicalPlanSpec
@@ -21,6 +24,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "single push down",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Resources: query.ResourceManagement{
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
@@ -29,7 +33,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -37,12 +41,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("from"),
@@ -70,26 +76,25 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
 							AggregateSet:    true,
 							AggregateMethod: "count",
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{},
@@ -106,11 +111,12 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "single push down with match",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("last")},
@@ -135,17 +141,13 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					MemoryBytesQuota: math.MaxInt64,
 				},
 				Now: time.Date(2017, 8, 8, 0, 0, 0, 0, time.UTC),
-				Bounds: plan.BoundsSpec{
-					Start: query.MinTime,
-					Stop:  query.Now,
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.MinTime,
 								Stop:  query.Now,
 							},
@@ -153,6 +155,10 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 							PointsLimit:   1,
 							DescendingSet: true,
 							Descending:    true,
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: plan.MinTime,
+							Stop:  values.ConvertTime(now),
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{},
@@ -169,11 +175,12 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "multiple push down",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -181,12 +188,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							(plan.ProcedureIDFromOperationID("from")),
@@ -225,26 +234,25 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 2,
 					MemoryBytesQuota: math.MaxInt64,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
 							LimitSet:    true,
 							PointsLimit: 10,
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("mean")},
@@ -254,6 +262,10 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 						Spec: &functions.MeanProcedureSpec{},
 						Parents: []plan.ProcedureID{
 							(plan.ProcedureIDFromOperationID("from")),
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
 						},
 						Children: nil,
 					},
@@ -270,6 +282,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "multiple yield",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Resources: query.ResourceManagement{
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
@@ -278,7 +291,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -286,12 +299,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{
@@ -339,24 +354,23 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
 						},
 						Parents: nil,
 						Children: []plan.ProcedureID{
@@ -365,14 +379,22 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 						},
 					},
 					plan.ProcedureIDFromOperationID("stddev"): {
-						ID:       plan.ProcedureIDFromOperationID("stddev"),
-						Spec:     &functions.StddevProcedureSpec{},
+						ID:   plan.ProcedureIDFromOperationID("stddev"),
+						Spec: &functions.StddevProcedureSpec{},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents:  []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{},
 					},
 					plan.ProcedureIDFromOperationID("skew"): {
-						ID:       plan.ProcedureIDFromOperationID("skew"),
-						Spec:     &functions.SkewProcedureSpec{},
+						ID:   plan.ProcedureIDFromOperationID("skew"),
+						Spec: &functions.SkewProcedureSpec{},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents:  []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{},
 					},
@@ -391,6 +413,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "group with aggregate",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Resources: query.ResourceManagement{
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
@@ -399,7 +422,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -407,12 +430,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{
@@ -447,23 +472,18 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
 							GroupingSet:     true,
 							GroupMode:       functions.GroupModeBy,
@@ -471,14 +491,22 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 							AggregateSet:    true,
 							AggregateMethod: "sum",
 						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents: nil,
 						Children: []plan.ProcedureID{
 							plan.ProcedureIDFromParentID(plan.ProcedureIDFromOperationID("from")),
 						},
 					},
 					plan.ProcedureIDFromParentID(plan.ProcedureIDFromOperationID("from")): {
-						ID:      plan.ProcedureIDFromParentID(plan.ProcedureIDFromOperationID("from")),
-						Spec:    &functions.SumProcedureSpec{},
+						ID:   plan.ProcedureIDFromParentID(plan.ProcedureIDFromOperationID("from")),
+						Spec: &functions.SumProcedureSpec{},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 					},
 				},
@@ -494,6 +522,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "group with distinct on tag",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Resources: query.ResourceManagement{
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
@@ -502,7 +531,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -510,12 +539,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{
@@ -552,23 +583,18 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
 							GroupingSet: true,
 							GroupMode:   functions.GroupModeBy,
@@ -576,14 +602,22 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 							LimitSet:    true,
 							PointsLimit: -1,
 						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents: nil,
 						Children: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("distinct"),
 						},
 					},
 					plan.ProcedureIDFromOperationID("distinct"): {
-						ID:      plan.ProcedureIDFromOperationID("distinct"),
-						Spec:    &functions.DistinctProcedureSpec{Column: "host"},
+						ID:   plan.ProcedureIDFromOperationID("distinct"),
+						Spec: &functions.DistinctProcedureSpec{Column: "host"},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 					},
 				},
@@ -599,6 +633,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "group with distinct on _value does not optimize",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Resources: query.ResourceManagement{
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
@@ -607,7 +642,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -615,12 +650,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{
@@ -657,27 +694,26 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
 							GroupingSet: true,
 							GroupMode:   functions.GroupModeBy,
 							GroupKeys:   []string{"host"},
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
 						},
 						Parents: nil,
 						Children: []plan.ProcedureID{
@@ -685,8 +721,12 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 						},
 					},
 					plan.ProcedureIDFromOperationID("distinct"): {
-						ID:      plan.ProcedureIDFromOperationID("distinct"),
-						Spec:    &functions.DistinctProcedureSpec{Column: "_value"},
+						ID:   plan.ProcedureIDFromOperationID("distinct"),
+						Spec: &functions.DistinctProcedureSpec{Column: "_value"},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 					},
 				},
@@ -702,6 +742,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 		{
 			name: "group with distinct on non-grouped does not optimize",
 			lp: &plan.LogicalPlanSpec{
+				Now: now,
 				Resources: query.ResourceManagement{
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
@@ -710,7 +751,7 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -718,12 +759,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range"): {
 						ID: plan.ProcedureIDFromOperationID("range"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 						Children: []plan.ProcedureID{
@@ -760,27 +803,26 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 					ConcurrencyQuota: 1,
 					MemoryBytesQuota: 10000,
 				},
-				Bounds: plan.BoundsSpec{
-					Start: query.Time{
-						IsRelative: true,
-						Relative:   -1 * time.Hour,
-					},
-				},
 				Procedures: map[plan.ProcedureID]*plan.Procedure{
 					plan.ProcedureIDFromOperationID("from"): {
 						ID: plan.ProcedureIDFromOperationID("from"),
 						Spec: &functions.FromProcedureSpec{
-							Database:  "mydb",
+							Bucket:    "mybucket",
 							BoundsSet: true,
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{
 									IsRelative: true,
 									Relative:   -1 * time.Hour,
 								},
+								Stop: query.Now,
 							},
 							GroupingSet: true,
 							GroupMode:   functions.GroupModeBy,
 							GroupKeys:   []string{"host"},
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
 						},
 						Parents: nil,
 						Children: []plan.ProcedureID{
@@ -788,8 +830,12 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 						},
 					},
 					plan.ProcedureIDFromOperationID("distinct"): {
-						ID:      plan.ProcedureIDFromOperationID("distinct"),
-						Spec:    &functions.DistinctProcedureSpec{Column: "region"},
+						ID:   plan.ProcedureIDFromOperationID("distinct"),
+						Spec: &functions.DistinctProcedureSpec{Column: "region"},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
 						Parents: []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 					},
 				},
@@ -799,6 +845,174 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 				Order: []plan.ProcedureID{
 					plan.ProcedureIDFromOperationID("from"),
 					plan.ProcedureIDFromOperationID("distinct"),
+				},
+			},
+		},
+		{
+			name: "bounds context",
+			lp: &plan.LogicalPlanSpec{
+				Now: now,
+				Procedures: map[plan.ProcedureID]*plan.Procedure{
+					plan.ProcedureIDFromOperationID("fromCSV"): {
+						ID: plan.ProcedureIDFromOperationID("fromCSV"),
+						Spec: &functions.FromCSVProcedureSpec{
+							File: "file",
+						},
+						Parents:  nil,
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range1")},
+					},
+					plan.ProcedureIDFromOperationID("range1"): {
+						ID: plan.ProcedureIDFromOperationID("range1"),
+						Spec: &functions.RangeProcedureSpec{
+							Bounds: query.Bounds{
+								Start: query.Time{
+									IsRelative: true,
+									Relative:   -1 * time.Hour,
+								},
+								Stop: query.Now,
+							},
+							TimeCol: "_time",
+						},
+						Parents: []plan.ProcedureID{
+							(plan.ProcedureIDFromOperationID("fromCSV")),
+						},
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range2")},
+					},
+					plan.ProcedureIDFromOperationID("range2"): {
+						ID: plan.ProcedureIDFromOperationID("range2"),
+						Spec: &functions.RangeProcedureSpec{
+							Bounds: query.Bounds{
+								Start: query.Time{
+									IsRelative: true,
+									Relative:   -30 * time.Minute,
+								},
+								Stop: query.Now,
+							},
+						},
+						Parents: []plan.ProcedureID{
+							(plan.ProcedureIDFromOperationID("range1")),
+						},
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("limit")},
+					},
+					plan.ProcedureIDFromOperationID("limit"): {
+						ID: plan.ProcedureIDFromOperationID("limit"),
+						Spec: &functions.LimitProcedureSpec{
+							N: 10,
+						},
+						Parents: []plan.ProcedureID{
+							plan.ProcedureIDFromOperationID("range2"),
+						},
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("mean")},
+					},
+					plan.ProcedureIDFromOperationID("mean"): {
+						ID:   plan.ProcedureIDFromOperationID("mean"),
+						Spec: &functions.MeanProcedureSpec{},
+						Parents: []plan.ProcedureID{
+							(plan.ProcedureIDFromOperationID("limit")),
+						},
+						Children: nil,
+					},
+				},
+				Order: []plan.ProcedureID{
+					plan.ProcedureIDFromOperationID("fromCSV"),
+					plan.ProcedureIDFromOperationID("range1"),
+					plan.ProcedureIDFromOperationID("range2"),
+					plan.ProcedureIDFromOperationID("limit"),
+					plan.ProcedureIDFromOperationID("mean"),
+				},
+			},
+			pp: &plan.PlanSpec{
+				Now: now,
+				Resources: query.ResourceManagement{
+					ConcurrencyQuota: 5,
+					MemoryBytesQuota: math.MaxInt64,
+				},
+				Procedures: map[plan.ProcedureID]*plan.Procedure{
+					plan.ProcedureIDFromOperationID("fromCSV"): {
+						ID: plan.ProcedureIDFromOperationID("fromCSV"),
+						Spec: &functions.FromCSVProcedureSpec{
+							File: "file",
+						},
+						Parents:  nil,
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range1")},
+					},
+					plan.ProcedureIDFromOperationID("range1"): {
+						ID: plan.ProcedureIDFromOperationID("range1"),
+						Spec: &functions.RangeProcedureSpec{
+							Bounds: query.Bounds{
+								Start: query.Time{
+									IsRelative: true,
+									Relative:   -1 * time.Hour,
+								},
+								Stop: query.Now,
+							},
+							TimeCol: "_time",
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+							Stop:  values.ConvertTime(now),
+						},
+						Parents: []plan.ProcedureID{
+							(plan.ProcedureIDFromOperationID("fromCSV")),
+						},
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range2")},
+					},
+					plan.ProcedureIDFromOperationID("range2"): {
+						ID: plan.ProcedureIDFromOperationID("range2"),
+						Spec: &functions.RangeProcedureSpec{
+							Bounds: query.Bounds{
+								Start: query.Time{
+									IsRelative: true,
+									Relative:   -30 * time.Minute,
+								},
+								Stop: query.Now,
+							},
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-30 * time.Minute)),
+							Stop:  values.ConvertTime(now),
+						},
+						Parents: []plan.ProcedureID{
+							(plan.ProcedureIDFromOperationID("range1")),
+						},
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("limit")},
+					},
+					plan.ProcedureIDFromOperationID("limit"): {
+						ID: plan.ProcedureIDFromOperationID("limit"),
+						Spec: &functions.LimitProcedureSpec{
+							N: 10,
+						},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-30 * time.Minute)),
+							Stop:  values.ConvertTime(now),
+						},
+						Parents: []plan.ProcedureID{
+							plan.ProcedureIDFromOperationID("range2"),
+						},
+						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("mean")},
+					},
+					plan.ProcedureIDFromOperationID("mean"): {
+						ID:   plan.ProcedureIDFromOperationID("mean"),
+						Spec: &functions.MeanProcedureSpec{},
+						Bounds: &plan.BoundsSpec{
+							Start: values.ConvertTime(now.Add(-30 * time.Minute)),
+							Stop:  values.ConvertTime(now),
+						},
+						Parents: []plan.ProcedureID{
+							(plan.ProcedureIDFromOperationID("limit")),
+						},
+						Children: nil,
+					},
+				},
+				Results: map[string]plan.YieldSpec{
+					plan.DefaultYieldName: {ID: plan.ProcedureIDFromOperationID("mean")},
+				},
+				Order: []plan.ProcedureID{
+					plan.ProcedureIDFromOperationID("fromCSV"),
+					plan.ProcedureIDFromOperationID("range1"),
+					plan.ProcedureIDFromOperationID("range2"),
+					plan.ProcedureIDFromOperationID("limit"),
+					plan.ProcedureIDFromOperationID("mean"),
 				},
 			},
 		},
@@ -812,12 +1026,14 @@ func TestPhysicalPlanner_Plan(t *testing.T) {
 }
 
 func TestPhysicalPlanner_Plan_PushDown_Branch(t *testing.T) {
+	now := time.Date(2017, 8, 8, 0, 0, 0, 0, time.UTC)
 	lp := &plan.LogicalPlanSpec{
+		Now: now,
 		Procedures: map[plan.ProcedureID]*plan.Procedure{
 			plan.ProcedureIDFromOperationID("from"): {
 				ID: plan.ProcedureIDFromOperationID("from"),
 				Spec: &functions.FromProcedureSpec{
-					Database: "mydb",
+					Bucket: "mybucket",
 				},
 				Parents: nil,
 				Children: []plan.ProcedureID{
@@ -862,10 +1078,7 @@ func TestPhysicalPlanner_Plan_PushDown_Branch(t *testing.T) {
 	fromID := plan.ProcedureIDFromOperationID("from")
 	fromIDDup := plan.ProcedureIDForDuplicate(fromID)
 	want := &plan.PlanSpec{
-		Bounds: plan.BoundsSpec{
-			Start: query.MinTime,
-			Stop:  query.Now,
-		},
+		Now: now,
 		Resources: query.ResourceManagement{
 			ConcurrencyQuota: 2,
 			MemoryBytesQuota: math.MaxInt64,
@@ -874,9 +1087,9 @@ func TestPhysicalPlanner_Plan_PushDown_Branch(t *testing.T) {
 			fromID: {
 				ID: fromID,
 				Spec: &functions.FromProcedureSpec{
-					Database:  "mydb",
+					Bucket:    "mybucket",
 					BoundsSet: true,
-					Bounds: plan.BoundsSpec{
+					Bounds: query.Bounds{
 						Start: query.MinTime,
 						Stop:  query.Now,
 					},
@@ -885,14 +1098,18 @@ func TestPhysicalPlanner_Plan_PushDown_Branch(t *testing.T) {
 					DescendingSet: true,
 					Descending:    true, // last
 				},
+				Bounds: &plan.BoundsSpec{
+					Start: plan.MinTime,
+					Stop:  values.ConvertTime(now),
+				},
 				Children: []plan.ProcedureID{},
 			},
 			fromIDDup: {
 				ID: fromIDDup,
 				Spec: &functions.FromProcedureSpec{
-					Database:  "mydb",
+					Bucket:    "mybucket",
 					BoundsSet: true,
-					Bounds: plan.BoundsSpec{
+					Bounds: query.Bounds{
 						Start: query.MinTime,
 						Stop:  query.Now,
 					},
@@ -900,6 +1117,10 @@ func TestPhysicalPlanner_Plan_PushDown_Branch(t *testing.T) {
 					PointsLimit:   1,
 					DescendingSet: true,
 					Descending:    false, // first
+				},
+				Bounds: &plan.BoundsSpec{
+					Start: plan.MinTime,
+					Stop:  values.ConvertTime(now),
 				},
 				Parents:  []plan.ProcedureID{},
 				Children: []plan.ProcedureID{},
@@ -919,12 +1140,14 @@ func TestPhysicalPlanner_Plan_PushDown_Branch(t *testing.T) {
 }
 
 func TestPhysicalPlanner_Plan_PushDown_Mixed(t *testing.T) {
+	now := time.Date(2017, 8, 8, 0, 0, 0, 0, time.UTC)
 	lp := &plan.LogicalPlanSpec{
+		Now: now,
 		Procedures: map[plan.ProcedureID]*plan.Procedure{
 			plan.ProcedureIDFromOperationID("from"): {
 				ID: plan.ProcedureIDFromOperationID("from"),
 				Spec: &functions.FromProcedureSpec{
-					Database: "mydb",
+					Bucket: "mybucket",
 				},
 				Parents:  nil,
 				Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range")},
@@ -932,12 +1155,14 @@ func TestPhysicalPlanner_Plan_PushDown_Mixed(t *testing.T) {
 			plan.ProcedureIDFromOperationID("range"): {
 				ID: plan.ProcedureIDFromOperationID("range"),
 				Spec: &functions.RangeProcedureSpec{
-					Bounds: plan.BoundsSpec{
+					Bounds: query.Bounds{
 						Start: query.Time{
 							IsRelative: true,
 							Relative:   -1 * time.Hour,
 						},
+						Stop: query.Now,
 					},
+					TimeCol: "_time",
 				},
 				Parents: []plan.ProcedureID{
 					(plan.ProcedureIDFromOperationID("from")),
@@ -985,12 +1210,7 @@ func TestPhysicalPlanner_Plan_PushDown_Mixed(t *testing.T) {
 	fromID := plan.ProcedureIDFromOperationID("from")
 	fromIDDup := plan.ProcedureIDForDuplicate(fromID)
 	want := &plan.PlanSpec{
-		Bounds: plan.BoundsSpec{
-			Start: query.Time{
-				IsRelative: true,
-				Relative:   -1 * time.Hour,
-			},
-		},
+		Now: now,
 		Resources: query.ResourceManagement{
 			ConcurrencyQuota: 3,
 			MemoryBytesQuota: math.MaxInt64,
@@ -999,16 +1219,21 @@ func TestPhysicalPlanner_Plan_PushDown_Mixed(t *testing.T) {
 			fromIDDup: {
 				ID: fromIDDup,
 				Spec: &functions.FromProcedureSpec{
-					Database:  "mydb",
+					Bucket:    "mybucket",
 					BoundsSet: true,
-					Bounds: plan.BoundsSpec{
+					Bounds: query.Bounds{
 						Start: query.Time{
 							IsRelative: true,
 							Relative:   -1 * time.Hour,
 						},
+						Stop: query.Now,
 					},
 					AggregateSet:    true,
 					AggregateMethod: "sum",
+				},
+				Bounds: &plan.BoundsSpec{
+					Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+					Stop:  values.ConvertTime(now),
 				},
 				Parents:  []plan.ProcedureID{},
 				Children: []plan.ProcedureID{},
@@ -1016,20 +1241,29 @@ func TestPhysicalPlanner_Plan_PushDown_Mixed(t *testing.T) {
 			plan.ProcedureIDFromOperationID("from"): {
 				ID: plan.ProcedureIDFromOperationID("from"),
 				Spec: &functions.FromProcedureSpec{
-					Database:  "mydb",
+					Bucket:    "mybucket",
 					BoundsSet: true,
-					Bounds: plan.BoundsSpec{
+					Bounds: query.Bounds{
 						Start: query.Time{
 							IsRelative: true,
 							Relative:   -1 * time.Hour,
 						},
+						Stop: query.Now,
 					},
+				},
+				Bounds: &plan.BoundsSpec{
+					Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+					Stop:  values.ConvertTime(now),
 				},
 				Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("mean")},
 			},
 			plan.ProcedureIDFromOperationID("mean"): {
-				ID:       plan.ProcedureIDFromOperationID("mean"),
-				Spec:     &functions.MeanProcedureSpec{},
+				ID:   plan.ProcedureIDFromOperationID("mean"),
+				Spec: &functions.MeanProcedureSpec{},
+				Bounds: &plan.BoundsSpec{
+					Start: values.ConvertTime(now.Add(-1 * time.Hour)),
+					Stop:  values.ConvertTime(now),
+				},
 				Parents:  []plan.ProcedureID{plan.ProcedureIDFromOperationID("from")},
 				Children: []plan.ProcedureID{},
 			},
@@ -1050,12 +1284,19 @@ func TestPhysicalPlanner_Plan_PushDown_Mixed(t *testing.T) {
 
 func PhysicalPlanTestHelper(t *testing.T, lp *plan.LogicalPlanSpec, want *plan.PlanSpec) {
 	t.Helper()
-	// Setup expected now time
+
+	// Setup expected now time if it doesn't exist
 	now := time.Now()
-	want.Now = now
+	if lp.Now.IsZero() {
+		lp.Now = now
+	}
+
+	if want.Now.IsZero() {
+		want.Now = now
+	}
 
 	planner := plan.NewPlanner()
-	got, err := planner.Plan(lp, nil, now)
+	got, err := planner.Plan(lp, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1076,10 +1317,11 @@ func BenchmarkPhysicalPlan(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	planner := plan.NewPlanner()
 	now := time.Date(2017, 8, 8, 0, 0, 0, 0, time.UTC)
+	lp.Now = now
+	planner := plan.NewPlanner()
 	for n := 0; n < b.N; n++ {
-		benchmarkPhysicalPlan, err = planner.Plan(lp, nil, now)
+		benchmarkPhysicalPlan, err = planner.Plan(lp, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1097,7 +1339,8 @@ func BenchmarkQueryToPhysicalPlan(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		benchmarkQueryToPhysicalPlan, err = pp.Plan(lp, nil, now)
+		lp.Now = now
+		benchmarkQueryToPhysicalPlan, err = pp.Plan(lp, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -29,8 +29,19 @@ required = [
     # Pigeon is the command used to generate the Flux parser from the PEG description
     "github.com/mna/pigeon",
     # goreleaser is a utility to build and upload to S3
-    "github.com/goreleaser/goreleaser"
+    "github.com/goreleaser/goreleaser",
+    "github.com/gogo/protobuf/protoc-gen-gogofaster",
+    "github.com/kevinburke/go-bindata"
 ]
+
+
+[[constraint]]
+  name = "github.com/goreleaser/goreleaser"
+  version = "0.84.0"
+
+[[constraint]]
+  name = "github.com/kevinburke/go-bindata"
+  version = "3.11.0"
 
 [[constraint]]
   name = "github.com/google/go-cmp"
@@ -38,8 +49,11 @@ required = [
 
 [[constraint]]
   name = "github.com/influxdata/influxdb"
-  branch = "master"
+  branch = "platform"
 
+[[constraint]]
+  name = "github.com/influxdata/tdigest"
+  branch = "master"
 
 # Pigeon hasn't made official releases for a while, we need to use master for now.
 # We plan to replace pigeon with a hand written parser, as such this dependency is short lived.
@@ -67,6 +81,11 @@ required = [
   go-tests = true
   unused-packages = true
 
+  [[prune.project]]
+    name = "github.com/kevinburke/go-bindata"
+    non-go = true
+    unused-packages = false
+
 [[constraint]]
   branch = "master"
   name = "github.com/andreyvit/diff"
@@ -74,3 +93,12 @@ required = [
 [[constraint]]
   branch = "master"
   name = "github.com/gonum/stat"
+
+[[constraint]]
+  name = "github.com/google/go-github"
+  branch = "master"
+
+# We are using v2 branch because no releases have been made using v2.
+[[constraint]]
+  name = "gopkg.in/robfig/cron.v2"
+  branch = "v2"

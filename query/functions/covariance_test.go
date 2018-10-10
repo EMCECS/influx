@@ -8,20 +8,19 @@ import (
 	"github.com/influxdata/platform/query/execute/executetest"
 	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/querytest"
-	"github.com/influxdata/platform/query/semantic"
 )
 
 func TestCovariance_NewQuery(t *testing.T) {
 	tests := []querytest.NewQueryTestCase{
 		{
 			Name: "simple covariance",
-			Raw:  `from(db:"mydb") |> covariance(columns:["a","b"],)`,
+			Raw:  `from(bucket:"mybucket") |> covariance(columns:["a","b"],)`,
 			Want: &query.Spec{
 				Operations: []*query.Operation{
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -43,13 +42,13 @@ func TestCovariance_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "pearsonr",
-			Raw:  `from(db:"mydb")|>covariance(columns:["a","b"],pearsonr:true)`,
+			Raw:  `from(bucket:"mybucket")|>covariance(columns:["a","b"],pearsonr:true)`,
 			Want: &query.Spec{
 				Operations: []*query.Operation{
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -72,19 +71,19 @@ func TestCovariance_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "global covariance",
-			Raw:  `cov(x: from(db:"mydb"), y:from(db:"mydb"), on:["host"], pearsonr:true)`,
+			Raw:  `cov(x: from(bucket:"mybucket"), y:from(bucket:"mybucket"), on:["host"], pearsonr:true)`,
 			Want: &query.Spec{
 				Operations: []*query.Operation{
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
 						ID: "from1",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -95,35 +94,7 @@ func TestCovariance_NewQuery(t *testing.T) {
 								"from0": "x",
 								"from1": "y",
 							},
-							Fn: &semantic.FunctionExpression{
-								Params: []*semantic.FunctionParam{
-									{Key: &semantic.Identifier{Name: "t"}},
-								},
-								Body: &semantic.ObjectExpression{
-									Properties: []*semantic.Property{
-										{
-											Key: &semantic.Identifier{Name: "x"},
-											Value: &semantic.MemberExpression{
-												Object: &semantic.MemberExpression{
-													Object:   &semantic.IdentifierExpression{Name: "t"},
-													Property: "x",
-												},
-												Property: "_value",
-											},
-										},
-										{
-											Key: &semantic.Identifier{Name: "y"},
-											Value: &semantic.MemberExpression{
-												Object: &semantic.MemberExpression{
-													Object:   &semantic.IdentifierExpression{Name: "t"},
-													Property: "y",
-												},
-												Property: "_value",
-											},
-										},
-									},
-								},
-							},
+							Method: "inner",
 						},
 					},
 					{
@@ -134,7 +105,7 @@ func TestCovariance_NewQuery(t *testing.T) {
 							AggregateConfig: execute.AggregateConfig{
 								TimeSrc: execute.DefaultStopColLabel,
 								TimeDst: execute.DefaultTimeColLabel,
-								Columns: []string{"x", "y"},
+								Columns: []string{"x__value", "y__value"},
 							},
 						},
 					},
@@ -177,8 +148,8 @@ func TestCovariance_Process(t *testing.T) {
 	testCases := []struct {
 		name string
 		spec *functions.CovarianceProcedureSpec
-		data []query.Block
-		want []*executetest.Block
+		data []query.Table
+		want []*executetest.Table
 	}{
 		{
 			name: "variance",
@@ -190,7 +161,7 @@ func TestCovariance_Process(t *testing.T) {
 					Columns: []string{"x", "y"},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -207,7 +178,7 @@ func TestCovariance_Process(t *testing.T) {
 					{execute.Time(0), execute.Time(5), execute.Time(4), 5.0, 5.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -230,7 +201,7 @@ func TestCovariance_Process(t *testing.T) {
 					Columns: []string{"x", "y"},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -247,7 +218,7 @@ func TestCovariance_Process(t *testing.T) {
 					{execute.Time(0), execute.Time(5), execute.Time(4), 5.0, 1.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -270,7 +241,7 @@ func TestCovariance_Process(t *testing.T) {
 					Columns: []string{"x", "y"},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -287,7 +258,7 @@ func TestCovariance_Process(t *testing.T) {
 					{execute.Time(0), execute.Time(5), execute.Time(4), 5.0, 2.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -311,7 +282,7 @@ func TestCovariance_Process(t *testing.T) {
 					Columns: []string{"x", "y"},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -328,7 +299,7 @@ func TestCovariance_Process(t *testing.T) {
 					{execute.Time(0), execute.Time(5), execute.Time(4), 5.0, 5.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -352,7 +323,7 @@ func TestCovariance_Process(t *testing.T) {
 					Columns: []string{"x", "y"},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -369,7 +340,7 @@ func TestCovariance_Process(t *testing.T) {
 					{execute.Time(0), execute.Time(5), execute.Time(4), 5.0, 1.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				KeyCols: []string{"_start", "_stop"},
 				ColMeta: []query.ColMeta{
 					{Label: "_start", Type: query.TTime},
@@ -390,7 +361,8 @@ func TestCovariance_Process(t *testing.T) {
 				t,
 				tc.data,
 				tc.want,
-				func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
+				nil,
+				func(d execute.Dataset, c execute.TableBuilderCache) execute.Transformation {
 					return functions.NewCovarianceTransformation(d, c, tc.spec)
 				},
 			)

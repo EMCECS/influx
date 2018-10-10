@@ -26,6 +26,10 @@ var AllTime = Bounds{
 	Stop:  MaxTime,
 }
 
+func (b Bounds) IsEmpty() bool {
+	return b.Start >= b.Stop
+}
+
 func (b Bounds) String() string {
 	return fmt.Sprintf("[%v, %v)", b.Start, b.Stop)
 }
@@ -35,7 +39,7 @@ func (b Bounds) Contains(t Time) bool {
 }
 
 func (b Bounds) Overlaps(o Bounds) bool {
-	return b.Contains(o.Start) || b.Contains(o.Stop)
+	return b.Contains(o.Start) || (b.Contains(o.Stop) && o.Stop > b.Start) || o.Contains(b.Start)
 }
 
 func (b Bounds) Equal(o Bounds) bool {

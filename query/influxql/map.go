@@ -54,6 +54,10 @@ func (t *transpilerState) mapFields(in cursor) (cursor, error) {
 		},
 	})
 	for i, f := range t.stmt.Fields {
+		if ref, ok := f.Expr.(*influxql.VarRef); ok && ref.Val == "time" {
+			// Skip past any time columns.
+			continue
+		}
 		value, err := t.mapField(f.Expr, in)
 		if err != nil {
 			return nil, err
@@ -88,7 +92,12 @@ func (t *transpilerState) mapField(expr influxql.Expr, in cursor) (semantic.Expr
 	}
 
 	switch expr := expr.(type) {
-	case *influxql.Call, *influxql.VarRef:
+	case *influxql.Call:
+		if isMathFunction(expr) {
+			return nil, fmt.Errorf("unimplemented math function: %q", expr.Name)
+		}
+		return nil, fmt.Errorf("missing symbol for %s", expr)
+	case *influxql.VarRef:
 		return nil, fmt.Errorf("missing symbol for %s", expr)
 	case *influxql.BinaryExpr:
 		return t.evalBinaryExpr(expr, in)
@@ -109,6 +118,8 @@ func (t *transpilerState) mapField(expr influxql.Expr, in cursor) (semantic.Expr
 		return &semantic.DurationLiteral{Value: expr.Val}, nil
 	case *influxql.TimeLiteral:
 		return &semantic.DateTimeLiteral{Value: expr.Val}, nil
+	case *influxql.RegexLiteral:
+		return &semantic.RegexpLiteral{Value: expr.Val}, nil
 	default:
 		// TODO(jsternberg): Handle the other expressions by turning them into
 		// an equivalent expression.
@@ -140,6 +151,10 @@ func (t *transpilerState) evalBinaryExpr(expr *influxql.BinaryExpr, in cursor) (
 			return b.logical(ast.AndOperator)
 		case influxql.OR:
 			return b.logical(ast.OrOperator)
+		case influxql.EQREGEX:
+			return b.eval(ast.RegexpMatchOperator)
+		case influxql.NEQREGEX:
+			return b.eval(ast.NotRegexpMatchOperator)
 		default:
 			return nil
 		}

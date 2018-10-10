@@ -30,14 +30,24 @@ type ToKafkaOpSpec struct {
 	Topic        string   `json:"topic"`
 	Balancer     string   `json:"balancer"`
 	Name         string   `json:"name"`
-	NameColumn   string   `json:"name_column"` // either name or name_column must be set, if none is set try to use the "_measurement" column.
-	TimeColumn   string   `json:"time_column"`
-	TagColumns   []string `json:"tag_columns"`
-	ValueColumns []string `json:"value_columns"`
-	MsgBufSize   int      `json:"msg_buffer_size"` // the maximim number of messages to buffer before sending to kafka, the library we use defaults to 100
+	NameColumn   string   `json:"nameColumn"` // either name or name_column must be set, if none is set try to use the "_measurement" column.
+	TimeColumn   string   `json:"timeColumn"`
+	TagColumns   []string `json:"tagColumns"`
+	ValueColumns []string `json:"valueColumns"`
+	MsgBufSize   int      `json:"msgBufferSize"` // the maximim number of messages to buffer before sending to kafka, the library we use defaults to 100
 }
 
+var ToKafkaSignature = query.DefaultFunctionSignature()
+
 func init() {
+	ToKafkaSignature.Params["brokers"] = semantic.NewArrayType(semantic.String)
+	ToKafkaSignature.Params["topic"] = semantic.String
+	ToKafkaSignature.Params["balancer"] = semantic.String
+	ToKafkaSignature.Params["name"] = semantic.String
+	ToKafkaSignature.Params["nameColumn"] = semantic.String
+	ToKafkaSignature.Params["timeColumn"] = semantic.String
+	ToKafkaSignature.Params["tagColumns"] = semantic.NewArrayType(semantic.String)
+	ToKafkaSignature.Params["valueColumns"] = semantic.NewArrayType(semantic.String)
 	query.RegisterFunctionWithSideEffect(ToKafkaKind, createToKafkaOpSpec, ToKafkaSignature)
 	query.RegisterOpSpec(ToKafkaKind,
 		func() query.OperationSpec { return &ToKafkaOpSpec{} })
@@ -95,7 +105,7 @@ func (o *ToKafkaOpSpec) ReadArgs(args query.Arguments) error {
 		return err
 	}
 	if !ok {
-		o.NameColumn, ok, err = args.GetString("name_column")
+		o.NameColumn, ok, err = args.GetString("nameColumn")
 		if err != nil {
 			return err
 		}
@@ -103,14 +113,14 @@ func (o *ToKafkaOpSpec) ReadArgs(args query.Arguments) error {
 			o.NameColumn = "_measurement"
 		}
 	}
-	o.TimeColumn, ok, err = args.GetString("time_column")
+	o.TimeColumn, ok, err = args.GetString("timeColumn")
 	if err != nil {
 		return err
 	}
 	if !ok {
 		o.TimeColumn = execute.DefaultTimeColLabel
 	}
-	tagColumns, ok, err := args.GetArray("tag_columns", semantic.String)
+	tagColumns, ok, err := args.GetArray("tagColumns", semantic.String)
 	if err != nil {
 		return err
 	}
@@ -121,7 +131,7 @@ func (o *ToKafkaOpSpec) ReadArgs(args query.Arguments) error {
 		}
 		sort.Strings(o.TagColumns)
 	}
-	valueColumns, ok, err := args.GetArray("value_columns", semantic.String)
+	valueColumns, ok, err := args.GetArray("valueColumns", semantic.String)
 	if err != nil {
 		return err
 	}
@@ -135,7 +145,7 @@ func (o *ToKafkaOpSpec) ReadArgs(args query.Arguments) error {
 		sort.Strings(o.TagColumns)
 	}
 
-	msgBufSize, ok, err := args.GetInt("msg_buffer_size")
+	msgBufSize, ok, err := args.GetInt("msgBufferSize")
 	o.MsgBufSize = int(msgBufSize)
 	if err != nil {
 		return err
@@ -156,8 +166,6 @@ func createToKafkaOpSpec(args query.Arguments, a *query.Administration) (query.O
 	}
 	return s, nil
 }
-
-var ToKafkaSignature = query.DefaultFunctionSignature()
 
 func (ToKafkaOpSpec) Kind() query.OperationKind {
 	return ToKafkaKind
@@ -209,7 +217,7 @@ func createToKafkaTransformation(id execute.DatasetID, mode execute.Accumulation
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", spec)
 	}
-	cache := execute.NewBlockBuilderCache(a.Allocator())
+	cache := execute.NewTableBuilderCache(a.Allocator())
 	d := execute.NewDataset(id, mode, cache)
 	t := NewToKafkaTransformation(d, cache, s)
 	return t, d, nil
@@ -217,14 +225,14 @@ func createToKafkaTransformation(id execute.DatasetID, mode execute.Accumulation
 
 type ToKafkaTransformation struct {
 	d     execute.Dataset
-	cache execute.BlockBuilderCache
+	cache execute.TableBuilderCache
 	spec  *ToKafkaProcedureSpec
 }
 
-func (t *ToKafkaTransformation) RetractBlock(id execute.DatasetID, key query.PartitionKey) error {
-	return t.d.RetractBlock(key)
+func (t *ToKafkaTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+	return t.d.RetractTable(key)
 }
-func NewToKafkaTransformation(d execute.Dataset, cache execute.BlockBuilderCache, spec *ToKafkaProcedureSpec) *ToKafkaTransformation {
+func NewToKafkaTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *ToKafkaProcedureSpec) *ToKafkaTransformation {
 	return &ToKafkaTransformation{
 		d:     d,
 		cache: cache,
@@ -256,7 +264,7 @@ func (m *toKafkaMetric) Time() time.Time {
 	return m.t
 }
 
-func (t *ToKafkaTransformation) Process(id execute.DatasetID, b query.Block) (err error) {
+func (t *ToKafkaTransformation) Process(id execute.DatasetID, tbl query.Table) (err error) {
 	w := DefaultKafkaWriterFactory(kafka.WriterConfig{
 		Brokers:       t.spec.Spec.Brokers,
 		Topic:         t.spec.Spec.Topic,
@@ -283,7 +291,7 @@ func (t *ToKafkaTransformation) Process(id execute.DatasetID, b query.Block) (er
 	e := protocol.NewEncoder(pw)
 	e.FailOnFieldErr(true)
 	e.SetFieldSortOrder(protocol.SortFields)
-	cols := b.Cols()
+	cols := tbl.Cols()
 	labels := make(map[string]idxType, len(cols))
 	for i, col := range cols {
 		labels[col.Label] = idxType{Idx: i, Type: col.Type}
@@ -302,7 +310,7 @@ func (t *ToKafkaTransformation) Process(id execute.DatasetID, b query.Block) (er
 		measurementNameCol = t.spec.Spec.NameColumn
 	}
 	// check if each col is a tag or value and cache this value for the loop
-	colMetadatas := b.Cols()
+	colMetadatas := tbl.Cols()
 	isTag := make([]bool, len(colMetadatas))
 	isValue := make([]bool, len(colMetadatas))
 	for i, col := range colMetadatas {
@@ -313,7 +321,7 @@ func (t *ToKafkaTransformation) Process(id execute.DatasetID, b query.Block) (er
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		err = b.Do(func(er query.ColReader) error {
+		err = tbl.Do(func(er query.ColReader) error {
 			l := er.Len()
 			for i := 0; i < l; i++ {
 				m.truncateTagsAndFields()

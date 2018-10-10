@@ -2,8 +2,10 @@ package query
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/influxdata/platform"
 )
 
 // Spec specifies a query.
@@ -11,6 +13,7 @@ type Spec struct {
 	Operations []*Operation       `json:"operations"`
 	Edges      []Edge             `json:"edges"`
 	Resources  ResourceManagement `json:"resources"`
+	Now        time.Time          `json:"now"`
 
 	sorted   []*Operation
 	children map[OperationID][]*Operation
@@ -43,6 +46,9 @@ func (q *Spec) Walk(f func(o *Operation) error) error {
 
 // Validate ensures the query is a valid DAG.
 func (q *Spec) Validate() error {
+	if q.Now.IsZero() {
+		return errors.New("now time must be set")
+	}
 	return q.prepare()
 }
 
@@ -173,4 +179,23 @@ func (q *Spec) Functions() ([]string, error) {
 		return nil
 	})
 	return funcs, err
+}
+
+// BucketsAccessed returns the set of buckets read and written by a query spec
+func (q *Spec) BucketsAccessed() (readBuckets, writeBuckets []platform.BucketFilter, err error) {
+	err = q.Walk(func(o *Operation) error {
+		bucketAwareOpSpec, ok := o.Spec.(BucketAwareOperationSpec)
+		if ok {
+			opBucketsRead, opBucketsWritten := bucketAwareOpSpec.BucketsAccessed()
+			readBuckets = append(readBuckets, opBucketsRead...)
+			writeBuckets =  append(writeBuckets, opBucketsWritten...)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return readBuckets, writeBuckets, nil
 }

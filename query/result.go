@@ -5,32 +5,33 @@ import (
 
 	"github.com/influxdata/platform/query/iocounter"
 	"github.com/influxdata/platform/query/values"
+	"github.com/pkg/errors"
 )
 
 type Result interface {
 	Name() string
-	// Blocks returns a BlockIterator for iterating through results
-	Blocks() BlockIterator
+	// Tables returns a TableIterator for iterating through results
+	Tables() TableIterator
 }
 
-type BlockIterator interface {
-	Do(f func(Block) error) error
+type TableIterator interface {
+	Do(f func(Table) error) error
 }
 
-type Block interface {
-	Key() PartitionKey
+type Table interface {
+	Key() GroupKey
 
 	Cols() []ColMeta
 
-	// Do calls f to process the data contained within the block.
+	// Do calls f to process the data contained within the table.
 	// The function f will be called zero or more times.
 	Do(f func(ColReader) error) error
 
-	// RefCount modifies the reference count on the block by n.
-	// When the RefCount goes to zero, the block is freed.
+	// RefCount modifies the reference count on the table by n.
+	// When the RefCount goes to zero, the table is freed.
 	RefCount(n int)
 
-	// Empty returns whether the block contains no records.
+	// Empty returns whether the table contains no records.
 	Empty() bool
 }
 
@@ -76,7 +77,7 @@ func (t DataType) String() string {
 // All data the ColReader exposes is guaranteed to be in memory.
 // Once a ColReader goes out of scope all slices are considered invalid.
 type ColReader interface {
-	Key() PartitionKey
+	Key() GroupKey
 	// Cols returns a list of column metadata.
 	Cols() []ColMeta
 	// Len returns the length of the slices.
@@ -90,10 +91,11 @@ type ColReader interface {
 	Times(j int) []values.Time
 }
 
-type PartitionKey interface {
+type GroupKey interface {
 	Cols() []ColMeta
 
 	HasCol(label string) bool
+	LabelValue(label string) values.Value
 
 	ValueBool(j int) bool
 	ValueUInt(j int) uint64
@@ -104,8 +106,8 @@ type PartitionKey interface {
 	ValueTime(j int) values.Time
 	Value(j int) values.Value
 
-	Equal(o PartitionKey) bool
-	Less(o PartitionKey) bool
+	Equal(o GroupKey) bool
+	Less(o GroupKey) bool
 	String() string
 }
 
@@ -131,14 +133,33 @@ type MultiResultDecoder interface {
 // MultiResultEncoder can encode multiple results into a writer.
 type MultiResultEncoder interface {
 	// Encode writes multiple results from r into w.
-	// Returns the number of bytes written to w and any error.
+	// Returns the number of bytes written to w and any error resulting from the encoding process.
+	// Errors obtained from the results object should be encoded to w and then discarded.
 	Encode(w io.Writer, results ResultIterator) (int64, error)
+}
+
+// EncoderError is an interface that any error produced from
+// a ResultEncoder implementation should conform to.
+// It allows for differentiation
+// between errors that occur in results, and errors that occur while encoding results.
+type EncoderError interface {
+	IsEncoderError() bool
+}
+
+// IsEncoderError reports whether or not the underlying cause of
+// an error is a valid EncoderError.
+func IsEncoderError(err error) bool {
+	encErr, ok := errors.Cause(err).(EncoderError)
+	return ok && encErr.IsEncoderError()
 }
 
 // DelimitedMultiResultEncoder encodes multiple results using a trailing delimiter.
 // The delimiter is written after every result.
 //
-// If an error is encountered when iterating EncodeError will be called on the Encoder.
+// If an error is encountered when iterating and the error is an encoder error,
+// the error will be returned. Otherwise, the error is assumed to
+// have arisen from query execution, and said error will be encoded with the
+// EncodeError method of the Encoder field.
 //
 // If the io.Writer implements flusher, it will be flushed after each delimiter.
 type DelimitedMultiResultEncoder struct {
@@ -156,9 +177,18 @@ type flusher interface {
 
 func (e *DelimitedMultiResultEncoder) Encode(w io.Writer, results ResultIterator) (int64, error) {
 	wc := &iocounter.Writer{Writer: w}
+
 	for results.More() {
 		result := results.Next()
 		if _, err := e.Encoder.Encode(wc, result); err != nil {
+			// If we have an error that's from
+			// encoding specifically, return it
+			if IsEncoderError(err) {
+				return wc.Count(), err
+			}
+			// Otherwise, the error is from query execution,
+			// so we encode it instead.
+			err := e.Encoder.EncodeError(wc, err)
 			return wc.Count(), err
 		}
 		if _, err := wc.Write(e.Delimiter); err != nil {
@@ -169,6 +199,7 @@ func (e *DelimitedMultiResultEncoder) Encode(w io.Writer, results ResultIterator
 			f.Flush()
 		}
 	}
+	// If we have any outlying errors in results, encode them
 	err := results.Err()
 	if err != nil {
 		err := e.Encoder.EncodeError(wc, err)

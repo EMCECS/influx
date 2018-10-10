@@ -4,10 +4,10 @@ import (
 	"math"
 	"testing"
 
-	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/execute/executetest"
+	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/querytest"
 )
 
@@ -132,6 +132,258 @@ func TestPercentile_Process(t *testing.T) {
 				agg,
 				tc.data,
 				tc.want,
+			)
+		})
+	}
+}
+
+func TestPercentileSelector_Process(t *testing.T) {
+	testCases := []struct {
+		name     string
+		quantile float64
+		data     []query.Table
+		want     []*executetest.Table
+	}{
+		{
+			name:     "select_10",
+			quantile: 0.1,
+			data: []query.Table{
+				&executetest.Table{
+					KeyCols: []string{"t1"},
+					ColMeta: []query.ColMeta{
+						{Label: "_time", Type: query.TTime},
+						{Label: "_value", Type: query.TFloat},
+						{Label: "t1", Type: query.TString},
+						{Label: "t2", Type: query.TString},
+					},
+					Data: [][]interface{}{
+						{execute.Time(0), 1.0, "a", "y"},
+						{execute.Time(10), 2.0, "a", "x"},
+						{execute.Time(20), 3.0, "a", "y"},
+						{execute.Time(30), 4.0, "a", "x"},
+						{execute.Time(40), 5.0, "a", "y"},
+					},
+				}},
+			want: []*executetest.Table{
+				{
+					KeyCols: []string{"t1"},
+					ColMeta: []query.ColMeta{
+						{Label: "_time", Type: query.TTime},
+						{Label: "_value", Type: query.TFloat},
+						{Label: "t1", Type: query.TString},
+						{Label: "t2", Type: query.TString},
+					},
+					Data: [][]interface{}{
+						{execute.Time(0), 1.0, "a", "y"},
+					},
+				},
+			},
+		},
+		{
+			name:     "select_20",
+			quantile: 0.2,
+			data: []query.Table{&executetest.Table{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(0), 1.0, "a", "y"},
+					{execute.Time(10), 2.0, "a", "x"},
+					{execute.Time(20), 3.0, "a", "y"},
+					{execute.Time(30), 4.0, "a", "x"},
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+			want: []*executetest.Table{
+				{
+					KeyCols: []string{"t1"},
+					ColMeta: []query.ColMeta{
+						{Label: "_time", Type: query.TTime},
+						{Label: "_value", Type: query.TFloat},
+						{Label: "t1", Type: query.TString},
+						{Label: "t2", Type: query.TString},
+					},
+					Data: [][]interface{}{
+						{execute.Time(0), 1.0, "a", "y"},
+					},
+				}},
+		},
+		{
+			name:     "select_40",
+			quantile: 0.4,
+			data: []query.Table{&executetest.Table{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(0), 1.0, "a", "y"},
+					{execute.Time(10), 2.0, "a", "x"},
+					{execute.Time(20), 3.0, "a", "y"},
+					{execute.Time(30), 4.0, "a", "x"},
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+			want: []*executetest.Table{{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(10), 2.0, "a", "x"},
+				},
+			}},
+		},
+		{
+			name:     "select_50",
+			quantile: 0.5,
+			data: []query.Table{&executetest.Table{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(0), 1.0, "a", "y"},
+					{execute.Time(10), 2.0, "a", "x"},
+					{execute.Time(20), 3.0, "a", "y"},
+					{execute.Time(30), 4.0, "a", "x"},
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+			want: []*executetest.Table{{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(20), 3.0, "a", "y"},
+				},
+			}},
+		},
+		{
+			name:     "select_80",
+			quantile: 0.8,
+			data: []query.Table{&executetest.Table{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(0), 1.0, "a", "y"},
+					{execute.Time(10), 2.0, "a", "x"},
+					{execute.Time(20), 3.0, "a", "y"},
+					{execute.Time(30), 4.0, "a", "x"},
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+			want: []*executetest.Table{{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(30), 4.0, "a", "x"},
+				},
+			}},
+		},
+		{
+			name:     "select_90",
+			quantile: 0.9,
+			data: []query.Table{&executetest.Table{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(0), 1.0, "a", "y"},
+					{execute.Time(10), 2.0, "a", "x"},
+					{execute.Time(20), 3.0, "a", "y"},
+					{execute.Time(30), 4.0, "a", "x"},
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+			want: []*executetest.Table{{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+		},
+		{
+			name:     "select_100",
+			quantile: 1.0,
+			data: []query.Table{&executetest.Table{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(0), 1.0, "a", "y"},
+					{execute.Time(10), 2.0, "a", "x"},
+					{execute.Time(20), 3.0, "a", "y"},
+					{execute.Time(30), 4.0, "a", "x"},
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+			want: []*executetest.Table{{
+				KeyCols: []string{"t1"},
+				ColMeta: []query.ColMeta{
+					{Label: "_time", Type: query.TTime},
+					{Label: "_value", Type: query.TFloat},
+					{Label: "t1", Type: query.TString},
+					{Label: "t2", Type: query.TString},
+				},
+				Data: [][]interface{}{
+					{execute.Time(40), 5.0, "a", "y"},
+				},
+			}},
+		},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			executetest.ProcessTestHelper(
+				t,
+				tc.data,
+				tc.want,
+				nil,
+				func(d execute.Dataset, c execute.TableBuilderCache) execute.Transformation {
+					return functions.NewExactPercentileSelectorTransformation(d, c, &functions.ExactPercentileSelectProcedureSpec{Percentile: tc.quantile}, executetest.UnlimitedAllocator)
+				},
 			)
 		})
 	}

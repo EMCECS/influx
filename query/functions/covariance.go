@@ -15,15 +15,15 @@ const CovarianceKind = "covariance"
 
 type CovarianceOpSpec struct {
 	PearsonCorrelation bool   `json:"pearsonr"`
-	ValueDst           string `json:"value_dst"`
+	ValueDst           string `json:"valueDst"`
 	execute.AggregateConfig
 }
 
-var covarianceSignature = query.DefaultFunctionSignature()
+var covarianceSignature = execute.DefaultAggregateSignature()
 
 func init() {
 	covarianceSignature.Params["pearsonr"] = semantic.Bool
-	covarianceSignature.Params["columns"] = semantic.Array
+	covarianceSignature.Params["valueDst"] = semantic.String
 
 	query.RegisterBuiltIn("covariance", covarianceBuiltIn)
 	query.RegisterFunction(CovarianceKind, createCovarianceOpSpec, covarianceSignature)
@@ -38,9 +38,8 @@ cov = (x,y,on,pearsonr=false) =>
     join(
         tables:{x:x, y:y},
         on:on,
-        fn: (t) => ({x:t.x._value, y:t.y._value}),
     )
-    |> covariance(pearsonr:pearsonr, columns:["x","y"])
+    |> covariance(pearsonr:pearsonr, columns:["x__value","y__value"])
 
 pearsonr = (x,y,on) => cov(x:x, y:y, on:on, pearsonr:true)
 `
@@ -118,7 +117,7 @@ func (s *CovarianceProcedureSpec) Copy() plan.ProcedureSpec {
 
 type CovarianceTransformation struct {
 	d      execute.Dataset
-	cache  execute.BlockBuilderCache
+	cache  execute.TableBuilderCache
 	bounds execute.Bounds
 	spec   CovarianceProcedureSpec
 
@@ -137,13 +136,13 @@ func createCovarianceTransformation(id execute.DatasetID, mode execute.Accumulat
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid spec type %T", spec)
 	}
-	cache := execute.NewBlockBuilderCache(a.Allocator())
+	cache := execute.NewTableBuilderCache(a.Allocator())
 	d := execute.NewDataset(id, mode, cache)
 	t := NewCovarianceTransformation(d, cache, s)
 	return t, d, nil
 }
 
-func NewCovarianceTransformation(d execute.Dataset, cache execute.BlockBuilderCache, spec *CovarianceProcedureSpec) *CovarianceTransformation {
+func NewCovarianceTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *CovarianceProcedureSpec) *CovarianceTransformation {
 	return &CovarianceTransformation{
 		d:     d,
 		cache: cache,
@@ -151,17 +150,17 @@ func NewCovarianceTransformation(d execute.Dataset, cache execute.BlockBuilderCa
 	}
 }
 
-func (t *CovarianceTransformation) RetractBlock(id execute.DatasetID, key query.PartitionKey) error {
-	return t.d.RetractBlock(key)
+func (t *CovarianceTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+	return t.d.RetractTable(key)
 }
 
-func (t *CovarianceTransformation) Process(id execute.DatasetID, b query.Block) error {
-	cols := b.Cols()
-	builder, created := t.cache.BlockBuilder(b.Key())
+func (t *CovarianceTransformation) Process(id execute.DatasetID, tbl query.Table) error {
+	cols := tbl.Cols()
+	builder, created := t.cache.TableBuilder(tbl.Key())
 	if !created {
-		return fmt.Errorf("covariance found duplicate block with key: %v", b.Key())
+		return fmt.Errorf("covariance found duplicate table with key: %v", tbl.Key())
 	}
-	execute.AddBlockKeyCols(b.Key(), builder)
+	execute.AddTableKeyCols(tbl.Key(), builder)
 	builder.AddCol(query.ColMeta{
 		Label: t.spec.TimeDst,
 		Type:  query.TTime,
@@ -176,12 +175,12 @@ func (t *CovarianceTransformation) Process(id execute.DatasetID, b query.Block) 
 	if cols[xIdx].Type != cols[yIdx].Type {
 		return errors.New("cannot compute the covariance between different types")
 	}
-	if err := execute.AppendAggregateTime(t.spec.TimeSrc, t.spec.TimeDst, b.Key(), builder); err != nil {
+	if err := execute.AppendAggregateTime(t.spec.TimeSrc, t.spec.TimeDst, tbl.Key(), builder); err != nil {
 		return err
 	}
 
 	t.reset()
-	b.Do(func(cr query.ColReader) error {
+	tbl.Do(func(cr query.ColReader) error {
 		switch typ := cols[xIdx].Type; typ {
 		case query.TFloat:
 			t.DoFloat(cr.Floats(xIdx), cr.Floats(yIdx))
@@ -191,7 +190,7 @@ func (t *CovarianceTransformation) Process(id execute.DatasetID, b query.Block) 
 		return nil
 	})
 
-	execute.AppendKeyValues(b.Key(), builder)
+	execute.AppendKeyValues(tbl.Key(), builder)
 	builder.AppendFloat(valueIdx, t.value())
 	return nil
 }

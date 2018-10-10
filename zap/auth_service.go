@@ -1,4 +1,4 @@
-package logger
+package zap
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 
 	"github.com/influxdata/platform"
 )
+
+var _ platform.AuthorizationService = (*AuthorizationService)(nil)
 
 // AuthorizationService manages authorizations.
 type AuthorizationService struct {
@@ -67,4 +69,15 @@ func (s *AuthorizationService) DeleteAuthorization(ctx context.Context, id platf
 	}()
 
 	return s.AuthorizationService.DeleteAuthorization(ctx, id)
+}
+
+// SetAuthorizationStatus updates an authorization's status and logs any errors.
+func (s *AuthorizationService) SetAuthorizationStatus(ctx context.Context, id platform.ID, status platform.Status) (err error) {
+	defer func() {
+		if err != nil {
+			s.Logger.Info("error updating authorization", zap.Error(err))
+		}
+	}()
+
+	return s.AuthorizationService.SetAuthorizationStatus(ctx, id, status)
 }

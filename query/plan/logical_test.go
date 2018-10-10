@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/functions"
 	"github.com/influxdata/platform/query/plan"
 	"github.com/influxdata/platform/query/plan/plantest"
 )
@@ -23,7 +23,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					{
 						ID: "0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -48,7 +48,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("0"): {
 						ID: plan.ProcedureIDFromOperationID("0"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("1")},
@@ -56,9 +56,10 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("1"): {
 						ID: plan.ProcedureIDFromOperationID("1"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{Relative: -1 * time.Hour},
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("0"),
@@ -88,7 +89,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("select0"): {
 						ID: plan.ProcedureIDFromOperationID("select0"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range0")},
@@ -96,9 +97,10 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range0"): {
 						ID: plan.ProcedureIDFromOperationID("range0"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{Relative: -1 * time.Hour},
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("select0"),
@@ -116,7 +118,7 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("select1"): {
 						ID: plan.ProcedureIDFromOperationID("select1"),
 						Spec: &functions.FromProcedureSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 						Parents:  nil,
 						Children: []plan.ProcedureID{plan.ProcedureIDFromOperationID("range1")},
@@ -124,9 +126,10 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 					plan.ProcedureIDFromOperationID("range1"): {
 						ID: plan.ProcedureIDFromOperationID("range1"),
 						Spec: &functions.RangeProcedureSpec{
-							Bounds: plan.BoundsSpec{
+							Bounds: query.Bounds{
 								Start: query.Time{Relative: -1 * time.Hour},
 							},
+							TimeCol: "_time",
 						},
 						Parents: []plan.ProcedureID{
 							plan.ProcedureIDFromOperationID("select1"),
@@ -171,6 +174,10 @@ func TestLogicalPlanner_Plan(t *testing.T) {
 	for i, tc := range testCases {
 		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			// Set Now time on query spec
+			tc.q.Now = time.Now().UTC()
+			tc.ap.Now = tc.q.Now
+
 			planner := plan.NewLogicalPlanner()
 			got, err := planner.Plan(tc.q)
 			if err != nil {
@@ -188,7 +195,7 @@ var benchmarkQuery = &query.Spec{
 		{
 			ID: "select0",
 			Spec: &functions.FromOpSpec{
-				Database: "mydb",
+				Bucket: "mybucket",
 			},
 		},
 		{
@@ -205,7 +212,7 @@ var benchmarkQuery = &query.Spec{
 		{
 			ID: "select1",
 			Spec: &functions.FromOpSpec{
-				Database: "mydb",
+				Bucket: "mybucket",
 			},
 		},
 		{

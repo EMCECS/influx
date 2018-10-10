@@ -9,18 +9,24 @@ import (
 )
 
 type Transformation interface {
-	RetractBlock(id DatasetID, key query.PartitionKey) error
-	Process(id DatasetID, b query.Block) error
+	RetractTable(id DatasetID, key query.GroupKey) error
+	Process(id DatasetID, tbl query.Table) error
 	UpdateWatermark(id DatasetID, t Time) error
 	UpdateProcessingTime(id DatasetID, t Time) error
 	Finish(id DatasetID, err error)
+}
+
+// StreamContext represents necessary context for a single stream of
+// query data.
+type StreamContext interface {
+	Bounds() *Bounds
 }
 
 type Administration interface {
 	OrganizationID() platform.ID
 
 	ResolveTime(qt query.Time) Time
-	Bounds() Bounds
+	StreamContext() StreamContext
 	Allocator() *Allocator
 	Parents() []DatasetID
 	ConvertID(plan.ProcedureID) DatasetID

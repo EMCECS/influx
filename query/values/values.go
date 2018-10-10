@@ -1,3 +1,4 @@
+// Package values declares the flux data types and implements them.
 package values
 
 import (
@@ -25,13 +26,6 @@ type Value interface {
 	Object() Object
 	Function() Function
 	Equal(Value) bool
-}
-
-// Function represents a callable type
-type Function interface {
-	Value
-	HasSideEffect() bool
-	Call(args Object) (Value, error)
 }
 
 type value struct {

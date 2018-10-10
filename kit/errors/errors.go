@@ -2,6 +2,7 @@ package errors
 
 import (
 	"fmt"
+	"net/http"
 )
 
 // TODO: move to base directory
@@ -15,6 +16,8 @@ const (
 	InvalidData = 3
 	// Forbidden indicates a forbidden operation.
 	Forbidden = 4
+	// NotFound indicates a resource was not found.
+	NotFound = 5
 )
 
 // Error indicates an error with a reference code and an HTTP status code.
@@ -92,4 +95,12 @@ func InvalidDataf(format string, i ...interface{}) error {
 // Forbiddenf constructs a Forbidden error with the given format.
 func Forbiddenf(format string, i ...interface{}) error {
 	return Errorf(Forbidden, format, i...)
+}
+
+func BadRequestError(msg string) error {
+	return Error{
+		Reference: InvalidData,
+		Code:      http.StatusBadRequest,
+		Err:       msg,
+	}
 }

@@ -13,8 +13,17 @@ const (
 	ErrorHeader     = "X-Influx-Error"
 	ReferenceHeader = "X-Influx-Reference"
 
-	errorHeaderMaxLength = 64
+	errorHeaderMaxLength = 256
 )
+
+// AuthzError is returned for authorization errors. When this error type is returned,
+// the user can be presented with a generic "authorization failed" error, but
+// the system can log the underlying AuthzError() so that operators have insight
+// into what actually failed with authorization.
+type AuthzError interface {
+	error
+	AuthzError() error
+}
 
 // CheckError reads the http.Response and returns an error if one exists.
 // It will automatically recognize the errors returned by Influx services
@@ -102,6 +111,8 @@ func statusCode(e kerrors.Error) int {
 		return http.StatusBadRequest
 	case kerrors.Forbidden:
 		return http.StatusForbidden
+	case kerrors.NotFound:
+		return http.StatusNotFound
 	default:
 		return http.StatusInternalServerError
 	}

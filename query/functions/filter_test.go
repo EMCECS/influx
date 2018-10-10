@@ -20,13 +20,13 @@ func TestFilter_NewQuery(t *testing.T) {
 	tests := []querytest.NewQueryTestCase{
 		{
 			Name: "from with database filter and range",
-			Raw:  `from(db:"mydb") |> filter(fn: (r) => r["t1"]=="val1" and r["t2"]=="val2") |> range(start:-4h, stop:-2h) |> count()`,
+			Raw:  `from(bucket:"mybucket") |> filter(fn: (r) => r["t1"]=="val1" and r["t2"]=="val2") |> range(start:-4h, stop:-2h) |> count()`,
 			Want: &query.Spec{
 				Operations: []*query.Operation{
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -67,6 +67,9 @@ func TestFilter_NewQuery(t *testing.T) {
 								Relative:   -2 * time.Hour,
 								IsRelative: true,
 							},
+							TimeCol:  "_time",
+							StartCol: "_start",
+							StopCol:  "_stop",
 						},
 					},
 					{
@@ -85,7 +88,7 @@ func TestFilter_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "from with database filter (and with or) and range",
-			Raw: `from(db:"mydb")
+			Raw: `from(bucket:"mybucket")
 						|> filter(fn: (r) =>
 								(
 									(r["t1"]=="val1")
@@ -102,7 +105,7 @@ func TestFilter_NewQuery(t *testing.T) {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -154,6 +157,9 @@ func TestFilter_NewQuery(t *testing.T) {
 								Relative:   -2 * time.Hour,
 								IsRelative: true,
 							},
+							TimeCol:  "_time",
+							StartCol: "_start",
+							StopCol:  "_stop",
 						},
 					},
 					{
@@ -172,7 +178,7 @@ func TestFilter_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "from with database filter including fields",
-			Raw: `from(db:"mydb")
+			Raw: `from(bucket:"mybucket")
 						|> filter(fn: (r) =>
 							(r["t1"] =="val1")
 							and
@@ -185,7 +191,7 @@ func TestFilter_NewQuery(t *testing.T) {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -226,6 +232,9 @@ func TestFilter_NewQuery(t *testing.T) {
 								Relative:   -2 * time.Hour,
 								IsRelative: true,
 							},
+							TimeCol:  "_time",
+							StartCol: "_start",
+							StopCol:  "_stop",
 						},
 					},
 					{
@@ -244,7 +253,7 @@ func TestFilter_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "from with database filter with no parens including fields",
-			Raw: `from(db:"mydb")
+			Raw: `from(bucket:"mybucket")
 						|> filter(fn: (r) =>
 							r["t1"]=="val1"
 							and
@@ -257,7 +266,7 @@ func TestFilter_NewQuery(t *testing.T) {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -298,6 +307,9 @@ func TestFilter_NewQuery(t *testing.T) {
 								Relative:   -2 * time.Hour,
 								IsRelative: true,
 							},
+							TimeCol:  "_time",
+							StartCol: "_start",
+							StopCol:  "_stop",
 						},
 					},
 					{
@@ -316,7 +328,7 @@ func TestFilter_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "from with database filter with no parens including regex and field",
-			Raw: `from(db:"mydb")
+			Raw: `from(bucket:"mybucket")
 						|> filter(fn: (r) =>
 							r["t1"]==/val1/
 							and
@@ -329,7 +341,7 @@ func TestFilter_NewQuery(t *testing.T) {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -370,6 +382,9 @@ func TestFilter_NewQuery(t *testing.T) {
 								Relative:   -2 * time.Hour,
 								IsRelative: true,
 							},
+							TimeCol:  "_time",
+							StartCol: "_start",
+							StopCol:  "_stop",
 						},
 					},
 					{
@@ -388,7 +403,7 @@ func TestFilter_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "from with database regex with escape",
-			Raw: `from(db:"mydb")
+			Raw: `from(bucket:"mybucket")
 						|> filter(fn: (r) =>
 							r["t1"]==/va\/l1/
 						)`,
@@ -397,7 +412,7 @@ func TestFilter_NewQuery(t *testing.T) {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -424,7 +439,7 @@ func TestFilter_NewQuery(t *testing.T) {
 		},
 		{
 			Name: "from with database with two regex",
-			Raw: `from(db:"mydb")
+			Raw: `from(bucket:"mybucket")
 						|> filter(fn: (r) =>
 							r["t1"]==/va\/l1/
 							and
@@ -435,7 +450,7 @@ func TestFilter_NewQuery(t *testing.T) {
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mybucket",
 						},
 					},
 					{
@@ -530,8 +545,8 @@ func TestFilter_Process(t *testing.T) {
 	testCases := []struct {
 		name string
 		spec *functions.FilterProcedureSpec
-		data []query.Block
-		want []*executetest.Block
+		data []query.Table
+		want []*executetest.Table
 	}{
 		{
 			name: `_value>5`,
@@ -548,7 +563,7 @@ func TestFilter_Process(t *testing.T) {
 					},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "_value", Type: query.TFloat},
@@ -558,7 +573,7 @@ func TestFilter_Process(t *testing.T) {
 					{execute.Time(2), 6.0},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "_value", Type: query.TFloat},
@@ -585,8 +600,8 @@ func TestFilter_Process(t *testing.T) {
 					},
 				},
 			},
-			data: []query.Block{
-				&executetest.Block{
+			data: []query.Table{
+				&executetest.Table{
 					KeyCols: []string{"t1"},
 					ColMeta: []query.ColMeta{
 						{Label: "t1", Type: query.TString},
@@ -599,7 +614,7 @@ func TestFilter_Process(t *testing.T) {
 						{"a", execute.Time(2), 1.0},
 					},
 				},
-				&executetest.Block{
+				&executetest.Table{
 					KeyCols: []string{"t1"},
 					ColMeta: []query.ColMeta{
 						{Label: "t1", Type: query.TString},
@@ -613,7 +628,7 @@ func TestFilter_Process(t *testing.T) {
 					},
 				},
 			},
-			want: []*executetest.Block{
+			want: []*executetest.Table{
 				{
 					KeyCols: []string{"t1"},
 					ColMeta: []query.ColMeta{
@@ -681,7 +696,7 @@ func TestFilter_Process(t *testing.T) {
 					},
 				},
 			},
-			data: []query.Block{&executetest.Block{
+			data: []query.Table{&executetest.Table{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "_value", Type: query.TFloat},
@@ -694,7 +709,7 @@ func TestFilter_Process(t *testing.T) {
 					{execute.Time(3), 8.0, "a", "y"},
 				},
 			}},
-			want: []*executetest.Block{{
+			want: []*executetest.Table{{
 				ColMeta: []query.ColMeta{
 					{Label: "_time", Type: query.TTime},
 					{Label: "_value", Type: query.TFloat},
@@ -714,7 +729,8 @@ func TestFilter_Process(t *testing.T) {
 				t,
 				tc.data,
 				tc.want,
-				func(d execute.Dataset, c execute.BlockBuilderCache) execute.Transformation {
+				nil,
+				func(d execute.Dataset, c execute.TableBuilderCache) execute.Transformation {
 					f, err := functions.NewFilterTransformation(d, c, tc.spec)
 					if err != nil {
 						t.Fatal(err)

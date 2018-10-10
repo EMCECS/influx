@@ -19,9 +19,9 @@ type MultiResultEncoder struct{}
 // Expectations/Assumptions:
 //  1.  Each result will be published as a 'statement' in the top-level list of results. The result name
 //      will be interpreted as an integer and used as the statement id.
-//  2.  If the _measurement name is present in the partition key, it will be used as the result name instead
+//  2.  If the _measurement name is present in the group key, it will be used as the result name instead
 //      of as a normal tag.
-//  3.  All columns in the partition key must be strings and they will be used as tags. There is no current way
+//  3.  All columns in the group key must be strings and they will be used as tags. There is no current way
 //      to have a tag and field be the same name in the results.
 //      TODO(jsternberg): For full compatibility, the above must be possible.
 //  4.  All other columns are fields and will be output in the order they are found.
@@ -41,20 +41,20 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 			break
 		}
 
-		blocks := res.Blocks()
+		tables := res.Tables()
 
 		result := Result{StatementID: id}
-		if err := blocks.Do(func(b query.Block) error {
+		if err := tables.Do(func(tbl query.Table) error {
 			var row Row
 
-			for j, c := range b.Key().Cols() {
+			for j, c := range tbl.Key().Cols() {
 				if c.Type != query.TString {
 					// Skip any columns that aren't strings. They are extra ones that
 					// flux includes by default like the start and end times that we do not
 					// care about.
 					continue
 				}
-				v := b.Key().Value(j).Str()
+				v := tbl.Key().Value(j).Str()
 				if c.Label == "_measurement" {
 					row.Name = v
 				} else if c.Label == "_field" {
@@ -74,10 +74,10 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 			// from the ordering given in the original query.
 			resultColMap := map[string]int{}
 			j := 1
-			for _, c := range b.Cols() {
+			for _, c := range tbl.Cols() {
 				if c.Label == execute.DefaultTimeColLabel {
 					resultColMap[c.Label] = 0
-				} else if !b.Key().HasCol(c.Label) {
+				} else if !tbl.Key().HasCol(c.Label) {
 					resultColMap[c.Label] = j
 					j++
 				}
@@ -91,7 +91,7 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 				row.Columns[v] = k
 			}
 
-			if err := b.Do(func(cr query.ColReader) error {
+			if err := tbl.Do(func(cr query.ColReader) error {
 				// Preallocate the number of rows for the response to make this section
 				// of code easier to read. Find a time column which should exist
 				// in the output.
@@ -101,7 +101,7 @@ func (e *MultiResultEncoder) Encode(w io.Writer, results query.ResultIterator) (
 				}
 
 				j := 0
-				for idx, c := range b.Cols() {
+				for idx, c := range tbl.Cols() {
 					if cr.Key().HasCol(c.Label) {
 						continue
 					}

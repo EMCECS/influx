@@ -3,7 +3,6 @@ package functions
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 
 	"context"
@@ -147,14 +146,14 @@ func (c *CSVSource) Run(ctx context.Context) {
 	var err error
 	var max execute.Time
 	maxSet := false
-	err = c.data.Blocks().Do(func(b query.Block) error {
+	err = c.data.Tables().Do(func(tbl query.Table) error {
 		for _, t := range c.ts {
-			err := t.Process(c.id, b)
+			err := t.Process(c.id, tbl)
 			if err != nil {
 				return err
 			}
-			if idx := execute.ColIdx(execute.DefaultStopColLabel, b.Key().Cols()); idx >= 0 {
-				if stop := b.Key().ValueTime(idx); !maxSet || stop > max {
+			if idx := execute.ColIdx(execute.DefaultStopColLabel, tbl.Key().Cols()); idx >= 0 {
+				if stop := tbl.Key().ValueTime(idx); !maxSet || stop > max {
 					max = stop
 					maxSet = true
 				}
@@ -168,14 +167,12 @@ func (c *CSVSource) Run(ctx context.Context) {
 
 	if maxSet {
 		for _, t := range c.ts {
-			log.Println("UpdateWatermark", max)
 			t.UpdateWatermark(c.id, max)
 		}
 	}
 
 FINISH:
 	for _, t := range c.ts {
-		log.Println("FINISH")
 		t.Finish(c.id, err)
 	}
 }

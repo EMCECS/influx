@@ -6,7 +6,6 @@ import (
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/semantic"
 )
 
 const MinKind = "min"
@@ -15,12 +14,9 @@ type MinOpSpec struct {
 	execute.SelectorConfig
 }
 
-var minSignature = query.DefaultFunctionSignature()
+var minSignature = execute.DefaultSelectorSignature()
 
 func init() {
-	minSignature.Params["column"] = semantic.String
-	minSignature.Params["useRowTime"] = semantic.Bool
-
 	query.RegisterFunction(MinKind, createMinOpSpec, minSignature)
 	query.RegisterOpSpec(MinKind, newMinOp)
 	plan.RegisterProcedureSpec(MinKind, newMinProcedure, MinKind)

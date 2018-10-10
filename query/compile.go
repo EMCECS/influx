@@ -16,11 +16,10 @@ import (
 )
 
 const (
-	TableParameter = "table"
-
-	tableIDKey      = "id"
+	TableParameter  = "table"
 	tableKindKey    = "kind"
 	tableParentsKey = "parents"
+	nowOption       = "now"
 	//tableSpecKey    = "spec"
 )
 
@@ -37,34 +36,24 @@ type options struct {
 }
 
 // Compile evaluates a Flux script producing a query Spec.
-func Compile(ctx context.Context, q string, opts ...Option) (*Spec, error) {
+// now parameter must be non-zero, that is the default now time should be set before compiling.
+func Compile(ctx context.Context, q string, now time.Time, opts ...Option) (*Spec, error) {
 	o := new(options)
 	for _, opt := range opts {
 		opt(o)
 	}
+
 	s, _ := opentracing.StartSpanFromContext(ctx, "parse")
-	astProg, err := parser.NewAST(q)
-	if err != nil {
+	itrp := NewInterpreter()
+	itrp.SetOption(nowOption, nowFunc(now))
+	if err := Eval(itrp, q); err != nil {
 		return nil, err
 	}
 	s.Finish()
 	s, _ = opentracing.StartSpanFromContext(ctx, "compile")
 	defer s.Finish()
 
-	qd := new(queryDomain)
-	scope, decls := builtIns(qd)
-	interpScope := interpreter.NewScopeWithValues(scope)
-
-	// Convert AST program to a semantic program
-	semProg, err := semantic.New(astProg, decls)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := interpreter.Eval(semProg, interpScope); err != nil {
-		return nil, err
-	}
-	spec := qd.ToSpec()
+	spec := toSpecFromSideEffecs(itrp)
 
 	if o.verbose {
 		log.Println("Query Spec: ", Formatted(spec, FmtJSON))
@@ -72,24 +61,109 @@ func Compile(ctx context.Context, q string, opts ...Option) (*Spec, error) {
 	return spec, nil
 }
 
+// Eval evaluates the flux string q and update the given interpreter
+func Eval(itrp *interpreter.Interpreter, q string) error {
+	astProg, err := parser.NewAST(q)
+	if err != nil {
+		return err
+	}
+
+	// Convert AST program to a semantic program
+	semProg, err := semantic.New(astProg, builtinDeclarations.Copy())
+	if err != nil {
+		return err
+	}
+
+	if err := itrp.Eval(semProg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// NewInterpreter returns an interpreter instance with
+// pre-constructed options and global scopes.
+func NewInterpreter() *interpreter.Interpreter {
+	// Make a copy of the builtin options since they can be modified
+	options := make(map[string]values.Value, len(builtinOptions))
+	for k, v := range builtinOptions {
+		options[k] = v
+	}
+
+	return interpreter.NewInterpreter(options, builtinValues)
+}
+
+func nowFunc(now time.Time) values.Function {
+	timeVal := values.NewTimeValue(values.ConvertTime(now))
+	ftype := semantic.NewFunctionType(semantic.FunctionSignature{
+		ReturnType: semantic.Time,
+	})
+	call := func(args values.Object) (values.Value, error) {
+		return timeVal, nil
+	}
+	sideEffect := false
+	return values.NewFunction(nowOption, ftype, call, sideEffect)
+}
+
+func toSpecFromSideEffecs(itrp *interpreter.Interpreter) *Spec {
+	return ToSpec(itrp, itrp.SideEffects()...)
+}
+
+// ToSpec creates a query spec from the interpreter and list of values.
+func ToSpec(itrp *interpreter.Interpreter, vals ...values.Value) *Spec {
+	ider := &ider{
+		id:     0,
+		lookup: make(map[*TableObject]OperationID),
+	}
+
+	spec := new(Spec)
+	visited := make(map[*TableObject]bool)
+	nodes := make([]*TableObject, 0, len(vals))
+
+	for _, val := range vals {
+		if op, ok := val.(*TableObject); ok {
+			dup := false
+			for _, node := range nodes {
+				if op.Equal(node) {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				op.buildSpec(ider, spec, visited)
+				nodes = append(nodes, op)
+			}
+		}
+	}
+
+	// now option is Time value
+	nowValue, _ := itrp.Option(nowOption).Function().Call(nil)
+	spec.Now = nowValue.Time().Time()
+
+	return spec
+}
+
 type CreateOperationSpec func(args Arguments, a *Administration) (OperationSpec, error)
 
-var builtinScope = make(map[string]values.Value)
+var builtinValues = make(map[string]values.Value)
+var builtinOptions = make(map[string]values.Value)
 var builtinDeclarations = make(semantic.DeclarationScope)
 
 // list of builtin scripts
-var builtins = make(map[string]string)
+var builtinScripts = make(map[string]string)
 var finalized bool
 
-// RegisterBuiltIn adds any variable declarations in the script to the builtin scope.
+// RegisterBuiltIn adds any variable declarations written in Flux script to the builtin scope.
 func RegisterBuiltIn(name, script string) {
 	if finalized {
 		panic(errors.New("already finalized, cannot register builtin"))
 	}
-	builtins[name] = script
+	builtinScripts[name] = script
 }
 
 // RegisterFunction adds a new builtin top level function.
+// Name is the name of the function as it would be called.
+// c is a function reference of type CreateOperationSpec
+// sig is a function signature type that specifies the names and types of each argument for the function.
 func RegisterFunction(name string, c CreateOperationSpec, sig semantic.FunctionSignature) {
 	f := function{
 		t:             semantic.NewFunctionType(sig),
@@ -102,6 +176,9 @@ func RegisterFunction(name string, c CreateOperationSpec, sig semantic.FunctionS
 
 // RegisterFunctionWithSideEffect adds a new builtin top level function that produces side effects.
 // For example, the builtin functions yield(), toKafka(), and toHTTP() all produce side effects.
+// name is the name of the function as it would be called
+// c is a function reference of type CreateOperationSpec
+// sig is a function signature type that specifies the names and types of each argument for the function
 func RegisterFunctionWithSideEffect(name string, c CreateOperationSpec, sig semantic.FunctionSignature) {
 	f := function{
 		t:             semantic.NewFunctionType(sig),
@@ -117,11 +194,22 @@ func RegisterBuiltInValue(name string, v values.Value) {
 	if finalized {
 		panic(errors.New("already finalized, cannot register builtin"))
 	}
-	if _, ok := builtinScope[name]; ok {
+	if _, ok := builtinValues[name]; ok {
 		panic(fmt.Errorf("duplicate registration for builtin %q", name))
 	}
 	builtinDeclarations[name] = semantic.NewExternalVariableDeclaration(name, v.Type())
-	builtinScope[name] = v
+	builtinValues[name] = v
+}
+
+// RegisterBuiltInOption adds the value to the builtin scope.
+func RegisterBuiltInOption(name string, v values.Value) {
+	if finalized {
+		panic(errors.New("already finalized, cannot register builtin option"))
+	}
+	if _, ok := builtinOptions[name]; ok {
+		panic(fmt.Errorf("duplicate registration for builtin option %q", name))
+	}
+	builtinOptions[name] = v
 }
 
 // FinalizeBuiltIns must be called to complete registration.
@@ -131,13 +219,33 @@ func FinalizeBuiltIns() {
 		panic("already finalized")
 	}
 	finalized = true
-	// Call BuiltIns to validate all built-in values are valid.
-	// A panic will occur if any value is invalid.
-	_, _ = BuiltIns()
+
+	err := evalBuiltInScripts()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func evalBuiltInScripts() error {
+	itrp := interpreter.NewMutableInterpreter(builtinOptions, builtinValues)
+	for name, script := range builtinScripts {
+		astProg, err := parser.NewAST(script)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse builtin %q", name)
+		}
+		semProg, err := semantic.New(astProg, builtinDeclarations)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create semantic graph for builtin %q", name)
+		}
+
+		if err := itrp.Eval(semProg); err != nil {
+			return errors.Wrapf(err, "failed to evaluate builtin %q", name)
+		}
+	}
+	return nil
 }
 
 var TableObjectType = semantic.NewObjectType(map[string]semantic.Type{
-	tableIDKey:   semantic.String,
 	tableKindKey: semantic.String,
 	// TODO(nathanielc): The spec types vary significantly making type comparisons impossible, for now the solution is to state the type as an empty object.
 	//tableSpecKey: semantic.EmptyObject,
@@ -145,85 +253,140 @@ var TableObjectType = semantic.NewObjectType(map[string]semantic.Type{
 	tableParentsKey: semantic.NewArrayType(semantic.EmptyObject),
 })
 
+// IDer produces the mapping of table Objects to OpertionIDs
+type IDer interface {
+	ID(*TableObject) OperationID
+}
+
+// IDerOpSpec is the interface any operation spec that needs
+// access to OperationIDs in the query spec must implement.
+type IDerOpSpec interface {
+	IDer(ider IDer)
+}
+
 type TableObject struct {
-	ID      OperationID
+	// TODO(Josh): Remove args once the
+	// OperationSpec interface has an Equal method.
+	args    Arguments
 	Kind    OperationKind
 	Spec    OperationSpec
 	Parents values.Array
 }
 
-func (t TableObject) Operation() *Operation {
+func (t *TableObject) Operation(ider IDer) *Operation {
+	if iderOpSpec, ok := t.Spec.(IDerOpSpec); ok {
+		iderOpSpec.IDer(ider)
+	}
+
 	return &Operation{
-		ID:   t.ID,
+		ID:   ider.ID(t),
 		Spec: t.Spec,
 	}
 }
 
-func (t TableObject) String() string {
-	return fmt.Sprintf("{id: %q, kind: %q}", t.ID, t.Kind)
+type ider struct {
+	id     int
+	lookup map[*TableObject]OperationID
 }
 
-func (t TableObject) ToSpec() *Spec {
-	visited := make(map[OperationID]bool)
+func (i *ider) nextID() int {
+	next := i.id
+	i.id++
+	return next
+}
+
+func (i *ider) get(t *TableObject) (OperationID, bool) {
+	tableID, ok := i.lookup[t]
+	return tableID, ok
+}
+
+func (i *ider) set(t *TableObject, id int) OperationID {
+	opID := OperationID(fmt.Sprintf("%s%d", t.Kind, id))
+	i.lookup[t] = opID
+	return opID
+}
+
+func (i *ider) ID(t *TableObject) OperationID {
+	tableID, ok := i.get(t)
+	if !ok {
+		tableID = i.set(t, i.nextID())
+	}
+	return tableID
+}
+
+func (t *TableObject) ToSpec() *Spec {
+	ider := &ider{
+		id:     0,
+		lookup: make(map[*TableObject]OperationID),
+	}
 	spec := new(Spec)
-	t.buildSpec(spec, visited)
+	visited := make(map[*TableObject]bool)
+	t.buildSpec(ider, spec, visited)
 	return spec
 }
 
-func (t TableObject) buildSpec(spec *Spec, visited map[OperationID]bool) {
-	id := t.ID
+func (t *TableObject) buildSpec(ider IDer, spec *Spec, visited map[*TableObject]bool) {
+	// Traverse graph upwards to first unvisited node.
+	// Note: parents are sorted based on parameter name, so the visit order is consistent.
 	t.Parents.Range(func(i int, v values.Value) {
-		p := v.(TableObject)
-		if !visited[p.ID] {
+		p := v.(*TableObject)
+		if !visited[p] {
 			// rescurse up parents
-			p.buildSpec(spec, visited)
+			p.buildSpec(ider, spec, visited)
 		}
+	})
 
+	// Assign ID to table object after visiting all ancestors.
+	tableID := ider.ID(t)
+
+	// Link table object to all parents after assigning ID.
+	t.Parents.Range(func(i int, v values.Value) {
+		p := v.(*TableObject)
 		spec.Edges = append(spec.Edges, Edge{
-			Parent: p.ID,
-			Child:  id,
+			Parent: ider.ID(p),
+			Child:  tableID,
 		})
 	})
 
-	visited[id] = true
-	spec.Operations = append(spec.Operations, t.Operation())
+	visited[t] = true
+	spec.Operations = append(spec.Operations, t.Operation(ider))
 }
 
-func (t TableObject) Type() semantic.Type {
+func (t *TableObject) Type() semantic.Type {
 	return TableObjectType
 }
 
-func (t TableObject) Str() string {
+func (t *TableObject) Str() string {
 	panic(values.UnexpectedKind(semantic.Object, semantic.String))
 }
-func (t TableObject) Int() int64 {
+func (t *TableObject) Int() int64 {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Int))
 }
-func (t TableObject) UInt() uint64 {
+func (t *TableObject) UInt() uint64 {
 	panic(values.UnexpectedKind(semantic.Object, semantic.UInt))
 }
-func (t TableObject) Float() float64 {
+func (t *TableObject) Float() float64 {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Float))
 }
-func (t TableObject) Bool() bool {
+func (t *TableObject) Bool() bool {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Bool))
 }
-func (t TableObject) Time() values.Time {
+func (t *TableObject) Time() values.Time {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Time))
 }
-func (t TableObject) Duration() values.Duration {
+func (t *TableObject) Duration() values.Duration {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Duration))
 }
-func (t TableObject) Regexp() *regexp.Regexp {
+func (t *TableObject) Regexp() *regexp.Regexp {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Regexp))
 }
-func (t TableObject) Array() values.Array {
+func (t *TableObject) Array() values.Array {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Array))
 }
-func (t TableObject) Object() values.Object {
+func (t *TableObject) Object() values.Object {
 	return t
 }
-func (t TableObject) Equal(rhs values.Value) bool {
+func (t *TableObject) Equal(rhs values.Value) bool {
 	if t.Type() != rhs.Type() {
 		return false
 	}
@@ -240,37 +403,39 @@ func (t TableObject) Equal(rhs values.Value) bool {
 	}
 	return true
 }
-func (t TableObject) Function() values.Function {
+func (t *TableObject) Function() values.Function {
 	panic(values.UnexpectedKind(semantic.Object, semantic.Function))
 }
 
-func (t TableObject) Get(name string) (values.Value, bool) {
+func (t *TableObject) Get(name string) (values.Value, bool) {
 	switch name {
-	case tableIDKey:
-		return values.NewStringValue(string(t.ID)), true
 	case tableKindKey:
 		return values.NewStringValue(string(t.Kind)), true
 	case tableParentsKey:
 		return t.Parents, true
 	default:
-		return nil, false
+		return t.args.Get(name)
 	}
 }
 
-func (t TableObject) keys() []string {
-	return []string{tableIDKey, tableKindKey, tableParentsKey}
+func (t *TableObject) keys() []string {
+	tableKeys := make([]string, 0, len(t.args.GetAll())+2)
+	return append(tableKeys, tableParentsKey, tableParentsKey)
 }
 
-func (t TableObject) Set(name string, v values.Value) {
-	//TableObject is immutable
+func (t *TableObject) Set(name string, v values.Value) {
+	// immutable
 }
 
-func (t TableObject) Len() int {
-	return 3
+func (t *TableObject) Len() int {
+	return len(t.keys())
 }
 
-func (t TableObject) Range(f func(name string, v values.Value)) {
-	f(tableIDKey, values.NewStringValue(string(t.ID)))
+func (t *TableObject) Range(f func(name string, v values.Value)) {
+	for _, arg := range t.args.GetAll() {
+		val, _ := t.args.Get(arg)
+		f(arg, val)
+	}
 	f(tableKindKey, values.NewStringValue(string(t.Kind)))
 	f(tableParentsKey, t.Parents)
 }
@@ -287,55 +452,24 @@ func DefaultFunctionSignature() semantic.FunctionSignature {
 	}
 }
 
+// BuiltIns returns a copy of the builtin values and their declarations.
 func BuiltIns() (map[string]values.Value, semantic.DeclarationScope) {
 	if !finalized {
 		panic("builtins not finalized")
 	}
-	qd := new(queryDomain)
-	return builtIns(qd)
-}
-
-func builtIns(qd *queryDomain) (map[string]values.Value, semantic.DeclarationScope) {
-	decls := builtinDeclarations.Copy()
-	scope := make(map[string]values.Value, len(builtinScope))
-	for k, v := range builtinScope {
-		if v.Type().Kind() == semantic.Function {
-			if f, ok := v.Function().(*function); ok {
-				// Must make separate copy of f. Otherwise function
-				// tests will modify same f and tests will break.
-				newfunc := f.copy()
-				newfunc.qd = qd
-				v = newfunc
-			}
-		}
-		scope[k] = v
+	cpy := make(map[string]values.Value, len(builtinValues))
+	for k, v := range builtinValues {
+		cpy[k] = v
 	}
-	interpScope := interpreter.NewScopeWithValues(scope)
-	for name, script := range builtins {
-		astProg, err := parser.NewAST(script)
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to parse builtin %q", name))
-		}
-		semProg, err := semantic.New(astProg, decls)
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to create semantic graph for builtin %q", name))
-		}
-
-		if _, err := interpreter.Eval(semProg, interpScope); err != nil {
-			panic(errors.Wrapf(err, "failed to evaluate builtin %q", name))
-		}
-	}
-	return scope, decls
+	return cpy, builtinDeclarations.Copy()
 }
 
 type Administration struct {
-	id      OperationID
 	parents values.Array
 }
 
-func newAdministration(id OperationID) *Administration {
+func newAdministration() *Administration {
 	return &Administration{
-		id: id,
 		// TODO(nathanielc): Once we can support recursive types change this to,
 		// interpreter.NewArray(TableObjectType)
 		parents: values.NewArray(semantic.EmptyObject),
@@ -348,7 +482,7 @@ func (a *Administration) AddParentFromArgs(args Arguments) error {
 	if err != nil {
 		return err
 	}
-	p, ok := parent.(TableObject)
+	p, ok := parent.(*TableObject)
 	if !ok {
 		return fmt.Errorf("argument is not a table object: got %T", parent)
 	}
@@ -358,11 +492,11 @@ func (a *Administration) AddParentFromArgs(args Arguments) error {
 
 // AddParent instructs the evaluation Context that a new edge should be created from the parent to the current operation.
 // Duplicate parents will be removed, so the caller need not concern itself with which parents have already been added.
-func (a *Administration) AddParent(np TableObject) {
+func (a *Administration) AddParent(np *TableObject) {
 	// Check for duplicates
 	found := false
-	a.parents.Range(func(i int, p values.Value) {
-		if p.(TableObject).ID == np.ID {
+	a.parents.Range(func(i int, v values.Value) {
+		if p, ok := v.(*TableObject); ok && p == np {
 			found = true
 		}
 	})
@@ -371,57 +505,16 @@ func (a *Administration) AddParent(np TableObject) {
 	}
 }
 
-type Domain interface {
-	ToSpec() *Spec
-}
-
-func NewDomain() Domain {
-	return new(queryDomain)
-}
-
-type queryDomain struct {
-	id int
-
-	operations []TableObject
-}
-
-func (d *queryDomain) NewID(name string) OperationID {
-	return OperationID(fmt.Sprintf("%s%d", name, d.nextID()))
-}
-
-func (d *queryDomain) nextID() int {
-	id := d.id
-	d.id++
-	return id
-}
-
-func (d *queryDomain) ToSpec() *Spec {
-	spec := new(Spec)
-	visited := make(map[OperationID]bool)
-	for _, t := range d.operations {
-		t.buildSpec(spec, visited)
-	}
-	return spec
-}
-
 type function struct {
 	name          string
 	t             semantic.Type
 	createOpSpec  CreateOperationSpec
-	qd            *queryDomain
 	hasSideEffect bool
-}
-
-func (f *function) copy() *function {
-	newfunc := new(function)
-	*newfunc = *f
-	return newfunc
 }
 
 func (f *function) Type() semantic.Type {
 	return f.t
 }
-
 func (f *function) Str() string {
 	panic(values.UnexpectedKind(semantic.Function, semantic.String))
 }
@@ -471,29 +564,19 @@ func (f *function) Call(argsObj values.Object) (values.Value, error) {
 }
 
 func (f *function) call(args interpreter.Arguments) (values.Value, error) {
-	id := f.qd.NewID(f.name)
-
-	a := newAdministration(id)
-
-	spec, err := f.createOpSpec(Arguments{Arguments: args}, a)
+	a := newAdministration()
+	arguments := Arguments{Arguments: args}
+	spec, err := f.createOpSpec(arguments, a)
 	if err != nil {
 		return nil, err
 	}
 
-	if a.parents.Len() > 1 {
-		// Always add parents in a consistent order
-		a.parents.Sort(func(i, j values.Value) bool {
-			return i.(TableObject).ID < j.(TableObject).ID
-		})
-	}
-
-	t := TableObject{
-		ID:      id,
+	t := &TableObject{
+		args:    arguments,
 		Kind:    spec.Kind(),
 		Spec:    spec,
 		Parents: a.parents,
 	}
-	f.qd.operations = append(f.qd.operations, t)
 	return t, nil
 }
 
