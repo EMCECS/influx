@@ -6,10 +6,10 @@ import (
 	"log"
 	"math"
 
-	"github.com/akurilov/influx"
-	"github.com/akurilov/influx/query"
-	"github.com/akurilov/influx/query/execute"
-	"github.com/akurilov/influx/query/semantic"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/execute"
+	"github.com/influxdata/platform/query/semantic"
 	"github.com/pkg/errors"
 )
 
