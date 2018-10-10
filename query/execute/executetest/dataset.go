@@ -80,7 +80,7 @@ func TransformationPassThroughTestHelper(t *testing.T, newTr NewTransformation) 
 	tr.Finish(parentID, nil)
 
 	exp := &Dataset{
-		ID: d.ID,
+		ID:                    d.ID,
 		ProcessingTimeUpdates: []execute.Time{now},
 		WatermarkUpdates:      []execute.Time{now},
 		Finished:              true,

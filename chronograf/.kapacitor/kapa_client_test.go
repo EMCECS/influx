@@ -3,9 +3,9 @@ package kapacitor_test
 import (
 	"testing"
 
+	client "github.com/influxdata/kapacitor/client/v1"
 	"github.com/influxdata/platform/chronograf/kapacitor"
 	"github.com/influxdata/platform/chronograf/mocks"
-	client "github.com/influxdata/kapacitor/client/v1"
 )
 
 func Test_Kapacitor_PaginatingKapaClient(t *testing.T) {

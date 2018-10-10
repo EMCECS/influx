@@ -1,13 +1,13 @@
 package query
 
 import (
+	"context"
+	"github.com/google/go-cmp/cmp"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/kit/errors"
+	"github.com/influxdata/platform/mock"
 	"testing"
 	"time"
-	"context"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/kit/errors"
 )
 
 func newBucketServiceWithOneBucket(bucket platform.Bucket) platform.BucketService {
@@ -35,7 +35,7 @@ func TestPreAuthorizer_PreAuthorize(t *testing.T) {
 
 	// Try to pre-authorize with bucket service with no buckets
 	// and no authorization
-	auth := &platform.Authorization{Status:platform.Active}
+	auth := &platform.Authorization{Status: platform.Active}
 	emptyBucketService := mock.NewBucketService()
 	preAuthorizer := NewPreAuthorizer(emptyBucketService)
 
@@ -49,7 +49,7 @@ func TestPreAuthorizer_PreAuthorize(t *testing.T) {
 	id, _ := platform.IDFromString("DEADBEEF")
 	bucketService := newBucketServiceWithOneBucket(platform.Bucket{
 		Name: "my_bucket",
-		ID: *id,
+		ID:   *id,
 	})
 
 	preAuthorizer = NewPreAuthorizer(bucketService)
@@ -60,7 +60,7 @@ func TestPreAuthorizer_PreAuthorize(t *testing.T) {
 
 	// Try to authorize with read permission on bucket
 	auth = &platform.Authorization{
-		Status:platform.Active,
+		Status:      platform.Active,
 		Permissions: []platform.Permission{platform.ReadBucketPermission(*id)},
 	}
 

@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform/chronograf"
 	client "github.com/influxdata/kapacitor/client/v1"
+	"github.com/influxdata/platform/chronograf"
 )
 
 type MockKapa struct {

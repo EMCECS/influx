@@ -154,9 +154,9 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 				var cl = NewStorageClient(cc)
 				// replace the shutdown connection with new one
 				bi.conns[i].conn.Close()
-				bi.conns[i] = connection {
-					host: h,
-					conn: cc,
+				bi.conns[i] = connection{
+					host:   h,
+					conn:   cc,
 					client: cl,
 				}
 				stream, err = cl.Read(bi.ctx, &req)

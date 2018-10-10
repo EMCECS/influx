@@ -1,9 +1,9 @@
 package query
 
 import (
-	"github.com/pkg/errors"
-	"github.com/influxdata/platform"
 	"context"
+	"github.com/influxdata/platform"
+	"github.com/pkg/errors"
 )
 
 // PreAuthorizer provides a method for ensuring that the buckets accessed by a query spec
@@ -42,7 +42,7 @@ func (a *preAuthorizer) PreAuthorize(ctx context.Context, spec *Spec, auth *plat
 		}
 
 		reqPerm := platform.ReadBucketPermission(bucket.ID)
-		if ! platform.Allowed(reqPerm, auth) {
+		if !platform.Allowed(reqPerm, auth) {
 			return errors.New("No read permission for bucket: \"" + bucket.Name + "\"")
 		}
 	}
@@ -54,7 +54,7 @@ func (a *preAuthorizer) PreAuthorize(ctx context.Context, spec *Spec, auth *plat
 		}
 
 		reqPerm := platform.WriteBucketPermission(bucket.ID)
-		if ! platform.Allowed(reqPerm, auth) {
+		if !platform.Allowed(reqPerm, auth) {
 			return errors.New("No write permission for bucket: \"" + bucket.Name + "\"")
 		}
 	}

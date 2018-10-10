@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/influxdata/platform"
+	"github.com/pkg/errors"
 )
 
 // Spec specifies a query.
@@ -188,7 +188,7 @@ func (q *Spec) BucketsAccessed() (readBuckets, writeBuckets []platform.BucketFil
 		if ok {
 			opBucketsRead, opBucketsWritten := bucketAwareOpSpec.BucketsAccessed()
 			readBuckets = append(readBuckets, opBucketsRead...)
-			writeBuckets =  append(writeBuckets, opBucketsWritten...)
+			writeBuckets = append(writeBuckets, opBucketsWritten...)
 		}
 		return nil
 	})
