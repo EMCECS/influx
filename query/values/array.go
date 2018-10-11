@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 // Array represents an sequence of elements

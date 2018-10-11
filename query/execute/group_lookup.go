@@ -3,7 +3,7 @@ package execute
 import (
 	"sort"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 type GroupLookup struct {

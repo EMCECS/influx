@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/influxdata/platform/chronograf"
+	"github.com/EMCECS/influx/chronograf"
 )
 
 func TestSourcesStore(t *testing.T) {

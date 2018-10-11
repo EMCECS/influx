@@ -3,7 +3,7 @@ package kapacitor
 import (
 	"testing"
 
-	"github.com/influxdata/platform/chronograf"
+	"github.com/EMCECS/influx/chronograf"
 )
 
 func TestAlertServices(t *testing.T) {

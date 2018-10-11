@@ -1,6 +1,6 @@
 package functions
 
-import "github.com/influxdata/platform/query"
+import "github.com/EMCECS/influx/query"
 
 func init() {
 	query.RegisterBuiltIn("increase", increaseBuiltIn)

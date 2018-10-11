@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/influxdata/platform/chronograf"
+	"github.com/EMCECS/influx/chronograf"
 )
 
 var _ Provider = &Auth0{}

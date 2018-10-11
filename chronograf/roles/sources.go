@@ -3,7 +3,7 @@ package roles
 import (
 	"context"
 
-	"github.com/influxdata/platform/chronograf"
+	"github.com/EMCECS/influx/chronograf"
 )
 
 // NOTE:

@@ -7,9 +7,9 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/plan"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/plan"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

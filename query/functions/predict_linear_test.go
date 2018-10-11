@@ -3,11 +3,11 @@ package functions_test
 import (
 	"testing"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute/executetest"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/querytest"
-	"github.com/influxdata/platform/query/execute"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute/executetest"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/querytest"
+	"github.com/EMCECS/influx/query/execute"
 )
 
 func TestPredictLinearOperation_Marshaling(t *testing.T) {
@@ -24,13 +24,13 @@ func TestPredictLinear_NewQuery(t *testing.T) {
 	tests := []querytest.NewQueryTestCase{
 		{
 			Name: "simple regression",
-			Raw:  `from(db:"mydb") |> predictLinear(columns:["a","b"], wantedValue: 10.0)`,
+			Raw:  `from(bucket:"mydb") |> predictLinear(columns:["a","b"], wantedValue: 10.0)`,
 			Want: &query.Spec{
 				Operations: []*query.Operation{
 					{
 						ID: "from0",
 						Spec: &functions.FromOpSpec{
-							Database: "mydb",
+							Bucket: "mydb",
 						},
 					},
 					{

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 // ProxyQueryService mocks the idep QueryService for testing.

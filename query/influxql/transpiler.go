@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions"
 )
 
 // Transpiler converts InfluxQL queries into a query spec.

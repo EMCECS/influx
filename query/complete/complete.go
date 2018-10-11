@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/interpreter"
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/interpreter"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 type functionType interface {

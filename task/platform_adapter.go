@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/task/backend"
-	"github.com/influxdata/platform/task/options"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/task/backend"
+	"github.com/EMCECS/influx/task/options"
 )
 
 // PlatformAdapter wraps a task.Store into the platform.TaskService interface.

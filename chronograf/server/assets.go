@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/dist"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/dist"
 )
 
 const (

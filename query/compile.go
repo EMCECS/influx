@@ -7,10 +7,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/influxdata/platform/query/interpreter"
-	"github.com/influxdata/platform/query/parser"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/interpreter"
+	"github.com/EMCECS/influx/query/parser"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/values"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )

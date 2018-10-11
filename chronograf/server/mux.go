@@ -12,9 +12,9 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/bouk/httprouter"
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/oauth2"
-	"github.com/influxdata/platform/chronograf/roles"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/oauth2"
+	"github.com/EMCECS/influx/chronograf/roles"
 	jhttprouter "github.com/julienschmidt/httprouter"
 )
 

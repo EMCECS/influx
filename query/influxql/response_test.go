@@ -7,8 +7,8 @@ import (
 
 	"github.com/andreyvit/diff"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query/csv"
-	"github.com/influxdata/platform/query/influxql"
+	"github.com/EMCECS/influx/query/csv"
+	"github.com/EMCECS/influx/query/influxql"
 )
 
 var crlfPattern = regexp.MustCompile(`\r?\n`)

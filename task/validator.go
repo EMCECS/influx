@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/influxdata/platform"
-	platcontext "github.com/influxdata/platform/context"
+	"github.com/EMCECS/influx"
+	platcontext "github.com/EMCECS/influx/context"
 )
 
 type authError struct {

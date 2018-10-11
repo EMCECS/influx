@@ -3,9 +3,9 @@ package plan
 import (
 	"fmt"
 
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/values"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 	uuid "github.com/satori/go.uuid"
 )
 

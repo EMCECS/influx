@@ -1,8 +1,8 @@
 package options
 
 import (
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions"
 )
 
 func init() {

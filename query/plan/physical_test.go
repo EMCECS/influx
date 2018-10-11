@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/values"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/plan/plantest"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/plan/plantest"
 )
 
 func TestPhysicalPlanner_Plan(t *testing.T) {

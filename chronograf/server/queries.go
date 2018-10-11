@@ -8,9 +8,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/influx"
-	"github.com/influxdata/platform/chronograf/influx/queries"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/influx"
+	"github.com/EMCECS/influx/chronograf/influx/queries"
 )
 
 // QueryRequest is query that will be converted to a queryConfig

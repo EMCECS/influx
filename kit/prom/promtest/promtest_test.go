@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/influxdata/platform/kit/prom"
-	"github.com/influxdata/platform/kit/prom/promtest"
+	"github.com/EMCECS/influx/kit/prom"
+	"github.com/EMCECS/influx/kit/prom/promtest"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )

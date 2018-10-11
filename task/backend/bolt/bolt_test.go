@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	bolt "github.com/coreos/bbolt"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/task/backend"
-	boltstore "github.com/influxdata/platform/task/backend/bolt"
-	"github.com/influxdata/platform/task/backend/storetest"
-	"github.com/influxdata/platform/task/options"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/task/backend"
+	boltstore "github.com/EMCECS/influx/task/backend/bolt"
+	"github.com/EMCECS/influx/task/backend/storetest"
+	"github.com/EMCECS/influx/task/options"
 )
 
 func init() {

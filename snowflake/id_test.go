@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 func TestIDLength(t *testing.T) {

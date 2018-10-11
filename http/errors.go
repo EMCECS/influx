@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	kerrors "github.com/influxdata/platform/kit/errors"
+	kerrors "github.com/EMCECS/influx/kit/errors"
 	"github.com/pkg/errors"
 )
 

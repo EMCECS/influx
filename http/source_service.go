@@ -10,11 +10,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/influxdata/platform"
-	kerrors "github.com/influxdata/platform/kit/errors"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/csv"
-	"github.com/influxdata/platform/query/influxql"
+	"github.com/EMCECS/influx"
+	kerrors "github.com/EMCECS/influx/kit/errors"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/csv"
+	"github.com/EMCECS/influx/query/influxql"
 	"github.com/julienschmidt/httprouter"
 )
 

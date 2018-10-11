@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // BucketService connects to Influx via HTTP using tokens to manage buckets

@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	bolt "github.com/coreos/bbolt"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/task/adaptertest"
-	"github.com/influxdata/platform/task/backend"
-	boltstore "github.com/influxdata/platform/task/backend/bolt"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/task/adaptertest"
+	"github.com/EMCECS/influx/task/backend"
+	boltstore "github.com/EMCECS/influx/task/backend/bolt"
 )
 
 func inMemFactory(t *testing.T) (*adaptertest.System, context.CancelFunc) {

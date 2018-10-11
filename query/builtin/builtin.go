@@ -4,9 +4,9 @@
 package builtin
 
 import (
-	"github.com/influxdata/platform/query"
-	_ "github.com/influxdata/platform/query/functions" // Import the built-in functions
-	_ "github.com/influxdata/platform/query/options"   // Import the built-in options
+	"github.com/EMCECS/influx/query"
+	_ "github.com/EMCECS/influx/query/functions" // Import the built-in functions
+	_ "github.com/EMCECS/influx/query/options"   // Import the built-in options
 )
 
 func init() {

@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/plan/plantest"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/plan/plantest"
+	"github.com/EMCECS/influx/query/values"
 )
 
 func TestBoundsIntersect(t *testing.T) {

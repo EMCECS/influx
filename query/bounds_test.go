@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 var EmptyBounds = query.Bounds{

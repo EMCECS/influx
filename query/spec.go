@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // Spec specifies a query.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 type tabWriter struct {

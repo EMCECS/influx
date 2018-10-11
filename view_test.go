@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 func TestView_MarshalJSON(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/influxdata/platform"
-	pcontext "github.com/influxdata/platform/context"
-	"github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	pcontext "github.com/EMCECS/influx/context"
+	"github.com/EMCECS/influx/kit/errors"
 	"github.com/julienschmidt/httprouter"
 	"go.uber.org/zap"
 )

@@ -5,7 +5,7 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	idpctx "github.com/influxdata/platform/context"
+	idpctx "github.com/EMCECS/influx/context"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

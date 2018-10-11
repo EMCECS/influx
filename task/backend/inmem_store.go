@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/snowflake"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/snowflake"
 )
 
 var _ Store = (*inmem)(nil)

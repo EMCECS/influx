@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/influxdata/platform/query/ast"
+	"github.com/EMCECS/influx/query/ast"
 )
 
 func toIfaceSlice(v interface{}) []interface{} {

@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/influx"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/influx"
 )
 
 const (

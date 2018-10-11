@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/log"
-	"github.com/influxdata/platform/chronograf/mocks"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/log"
+	"github.com/EMCECS/influx/chronograf/mocks"
 	"github.com/julienschmidt/httprouter"
 )
 

@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/bolt"
-	"github.com/influxdata/platform/chronograf/log"
-	"github.com/influxdata/platform/chronograf/oauth2"
-	"github.com/influxdata/platform/chronograf/server"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/bolt"
+	"github.com/EMCECS/influx/chronograf/log"
+	"github.com/EMCECS/influx/chronograf/oauth2"
+	"github.com/EMCECS/influx/chronograf/server"
 )
 
 func TestServer(t *testing.T) {

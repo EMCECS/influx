@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/execute/executetest"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/plan/plantest"
-	"github.com/influxdata/platform/query/querytest"
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/execute/executetest"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/plan/plantest"
+	"github.com/EMCECS/influx/query/querytest"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 func TestFilter_NewQuery(t *testing.T) {

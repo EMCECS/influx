@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 	cron "gopkg.in/robfig/cron.v2"
 )
 

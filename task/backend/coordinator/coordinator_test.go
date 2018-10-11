@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/task/backend"
-	"github.com/influxdata/platform/task/backend/coordinator"
-	"github.com/influxdata/platform/task/mock"
+	"github.com/EMCECS/influx"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/task/backend"
+	"github.com/EMCECS/influx/task/backend/coordinator"
+	"github.com/EMCECS/influx/task/mock"
 )
 
 func timeoutSelector(ch <-chan *mock.Task) (*mock.Task, error) {

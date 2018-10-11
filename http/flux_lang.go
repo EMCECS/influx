@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/influxdata/platform/query/complete"
-	"github.com/influxdata/platform/query/parser"
+	"github.com/EMCECS/influx/query/complete"
+	"github.com/EMCECS/influx/query/parser"
 	"github.com/julienschmidt/httprouter"
 )
 

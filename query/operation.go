@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // Operation denotes a single operation in a query.

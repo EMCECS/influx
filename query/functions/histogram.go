@@ -6,12 +6,12 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/interpreter"
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/interpreter"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/values"
 	"github.com/pkg/errors"
 )
 

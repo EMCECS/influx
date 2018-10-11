@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/functions"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/functions"
 )
 
 // function contains the prototype for invoking a function.

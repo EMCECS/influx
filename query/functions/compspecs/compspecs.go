@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/influxql"
-	"github.com/influxdata/platform/query/semantic/semantictest"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/influxql"
+	"github.com/EMCECS/influx/query/semantic/semantictest"
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/text/unicode/norm"

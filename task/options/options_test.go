@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/task/options"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/task/options"
 )
 
 func scriptGenerator(opt options.Options, body string) string {

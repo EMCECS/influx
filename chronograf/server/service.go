@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/enterprise"
-	"github.com/influxdata/platform/chronograf/influx"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/enterprise"
+	"github.com/EMCECS/influx/chronograf/influx"
 )
 
 // Service handles REST calls to the persistence

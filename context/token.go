@@ -3,8 +3,8 @@ package context
 import (
 	"context"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/kit/errors"
 )
 
 type contextKey string

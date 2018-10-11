@@ -2,7 +2,7 @@ package query
 
 import (
 	"github.com/pkg/errors"
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 	"context"
 )
 

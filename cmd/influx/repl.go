@@ -7,12 +7,12 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/influxdata/platform"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/query/control"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/functions/storage"
-	"github.com/influxdata/platform/query/repl"
+	"github.com/EMCECS/influx"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/query/control"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/functions/storage"
+	"github.com/EMCECS/influx/query/repl"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

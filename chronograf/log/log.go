@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/influxdata/platform/chronograf"
+	"github.com/EMCECS/influx/chronograf"
 	"github.com/sirupsen/logrus"
 )
 

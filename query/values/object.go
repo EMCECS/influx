@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"sync/atomic"
 
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 type Object interface {

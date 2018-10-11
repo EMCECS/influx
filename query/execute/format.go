@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 const fixedWidthTimeFmt = "2006-01-02T15:04:05.000000000Z"

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/values"
 	"github.com/pkg/errors"
 )
 

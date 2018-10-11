@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/chronograf"
+	"github.com/EMCECS/influx/chronograf"
 )
 
 // TimeRangeAsEpochNano extracs the min and max epoch times from the expression

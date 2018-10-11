@@ -3,10 +3,10 @@ package functions
 import (
 	"fmt"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 const DistinctKind = "distinct"

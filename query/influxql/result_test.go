@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/execute/executetest"
-	"github.com/influxdata/platform/query/influxql"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/execute/executetest"
+	"github.com/EMCECS/influx/query/influxql"
 )
 
 func TestMultiResultEncoder_Encode(t *testing.T) {

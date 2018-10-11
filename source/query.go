@@ -3,10 +3,10 @@ package source
 import (
 	"fmt"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/http"
-	"github.com/influxdata/platform/http/influxdb"
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/http"
+	"github.com/EMCECS/influx/http/influxdb"
+	"github.com/EMCECS/influx/query"
 )
 
 // NewQueryService creates a bucket service from a source.

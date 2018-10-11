@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 var ErrRunNotFound error = errors.New("run not found")

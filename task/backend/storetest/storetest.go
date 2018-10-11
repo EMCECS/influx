@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/task/backend"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/task/backend"
 )
 
 type CreateStoreFunc func(*testing.T) backend.Store

@@ -5,9 +5,9 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/values"
 )
 
 const (

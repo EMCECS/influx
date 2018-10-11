@@ -12,10 +12,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/iocounter"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/iocounter"
+	"github.com/EMCECS/influx/query/values"
 	"github.com/pkg/errors"
 )
 

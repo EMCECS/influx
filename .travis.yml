@@ -20,9 +20,8 @@ before_install:
 - sudo apt-get -y install docker-ce
 
 install:
-  # replace all imports from the upstream with imports from this fork
-  - sed -i -e 's/\"github\.com\/influxdata\/platform/\"github\.com\/EMCECS\/influx/g' $(find . | grep \\.go$)
   - dep ensure
+  - yarn config set ignore-engines true
 
 script:
   - make test

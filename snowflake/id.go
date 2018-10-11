@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/pkg/snowflake"
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // TODO: rename to id.go

@@ -5,9 +5,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/values"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 type Typer interface {

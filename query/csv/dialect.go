@@ -3,7 +3,7 @@ package csv
 import (
 	"net/http"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 const DialectType = "csv"

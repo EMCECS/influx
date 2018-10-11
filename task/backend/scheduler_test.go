@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/kit/prom"
-	"github.com/influxdata/platform/kit/prom/promtest"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/task/backend"
-	"github.com/influxdata/platform/task/mock"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/kit/prom"
+	"github.com/EMCECS/influx/kit/prom/promtest"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/task/backend"
+	"github.com/EMCECS/influx/task/mock"
 	"go.uber.org/zap/zaptest"
 )
 

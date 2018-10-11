@@ -3,9 +3,9 @@ package source
 import (
 	"fmt"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/http"
-	"github.com/influxdata/platform/http/influxdb"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/http"
+	"github.com/EMCECS/influx/http/influxdb"
 )
 
 // NewBucketService creates a bucket service from a source.

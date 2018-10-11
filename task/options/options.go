@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/semantic"
 	cron "gopkg.in/robfig/cron.v2"
 )
 

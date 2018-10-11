@@ -1,7 +1,7 @@
 package functions
 
 import (
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 func init() {

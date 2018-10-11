@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/server"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/server"
 	flags "github.com/jessevdk/go-flags"
 )
 

@@ -3,7 +3,7 @@ package mock
 import (
 	"testing"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // IDGenerator is mock implementation of platform.IDGenerator.

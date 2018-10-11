@@ -3,8 +3,8 @@ package influxql_test
 import (
 	"testing"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/influxql"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/influxql"
 )
 
 func TestCompiler(t *testing.T) {

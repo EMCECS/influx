@@ -3,10 +3,10 @@ package querytest
 import (
 	"math"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/control"
-	"github.com/influxdata/platform/query/functions"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/control"
+	"github.com/EMCECS/influx/query/functions"
 )
 
 var (

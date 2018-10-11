@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
 )
 
 // AggFuncTestHelper splits the data in half, runs Do over each split and compares

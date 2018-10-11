@@ -3,7 +3,8 @@ package pb
 import (
 	"testing"
 
-	"github.com/influxdata/platform/mock"
+	"github.com/EMCECS/influx/mock"
+	ostorage "github.com/influxdata/influxdb/services/storage"
 	"google.golang.org/grpc"
 	"context"
 	"strconv"
@@ -28,10 +29,10 @@ func TestReader_Success(t *testing.T) {
 	c := &connection {
 		host: hostWithPort,
 		conn: cc,
-		client: NewStorageClient(cc),
+		client: ostorage.NewStorageClient(cc),
 	}
 	ctx := context.TODO()
-	req := &ReadRequest{}
+	req := &ostorage.ReadRequest{}
 	stream, newConn, err := readWithRecovery(c, &ctx, req)
 	if stream == nil {
 		t.Error("no stream returned")
@@ -61,10 +62,10 @@ func TestReader_ConnRecovery(t *testing.T) {
 	c := &connection {
 		host: hostWithPort,
 		conn: cc,
-		client: NewStorageClient(cc),
+		client: ostorage.NewStorageClient(cc),
 	}
 	ctx := context.TODO()
-	req := &ReadRequest{}
+	req := &ostorage.ReadRequest{}
 
 	server.Close()
 	server = mock.NewServerMock(mock.DefaultConnProt, mock.DefaultConnHost, DefaultPort)

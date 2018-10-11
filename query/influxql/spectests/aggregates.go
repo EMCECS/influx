@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/semantic"
 )
 
 var aggregateCreateFuncs = []func(config execute.AggregateConfig) query.OperationSpec{

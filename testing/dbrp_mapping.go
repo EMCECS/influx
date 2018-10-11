@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 	"github.com/pkg/errors"
 )
 

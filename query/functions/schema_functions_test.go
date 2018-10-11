@@ -4,17 +4,17 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/execute/executetest"
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/execute/executetest"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/values"
 	"github.com/pkg/errors"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/querytest"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/querytest"
 )
 
 func TestSchemaMutions_NewQueries(t *testing.T) {

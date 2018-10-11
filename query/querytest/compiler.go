@@ -3,7 +3,7 @@ package querytest
 import (
 	"context"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 // FromCSVCompiler wraps a compiler and replaces all From operations with FromCSV

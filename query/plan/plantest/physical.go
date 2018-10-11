@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform/query/plan"
-	"github.com/influxdata/platform/query/semantic/semantictest"
+	"github.com/EMCECS/influx/query/plan"
+	"github.com/EMCECS/influx/query/semantic/semantictest"
 )
 
 var CmpOptions = []cmp.Option{

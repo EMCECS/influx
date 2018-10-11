@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	ostorage "github.com/influxdata/influxdb/services/storage"
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/semantic"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/semantic"
 	"github.com/pkg/errors"
 )
 

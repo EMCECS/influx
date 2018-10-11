@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	clog "github.com/influxdata/platform/chronograf/log"
+	clog "github.com/EMCECS/influx/chronograf/log"
 )
 
 var testTime = time.Date(1985, time.October, 25, 18, 0, 0, 0, time.UTC)

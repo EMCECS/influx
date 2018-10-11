@@ -8,10 +8,10 @@ import (
 
 	"github.com/andreyvit/diff"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/csv"
-	"github.com/influxdata/platform/query/execute/executetest"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/csv"
+	"github.com/EMCECS/influx/query/execute/executetest"
+	"github.com/EMCECS/influx/query/values"
 	"github.com/pkg/errors"
 )
 

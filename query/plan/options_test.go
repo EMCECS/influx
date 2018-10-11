@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/plan"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/plan"
 )
 
 func TestPhysicalPlanner_DefaultMemoryLimit(t *testing.T) {

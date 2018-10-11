@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/logger"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/task/backend"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/task/backend"
 	"go.uber.org/zap"
 )
 

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/influxdata/platform/kit/prom"
+	"github.com/EMCECS/influx/kit/prom"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

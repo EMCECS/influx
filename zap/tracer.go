@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/log"
 	"go.uber.org/zap"

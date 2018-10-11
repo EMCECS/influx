@@ -27,8 +27,8 @@ import (
 	"time"
 
 	bolt "github.com/coreos/bbolt"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/task/backend"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/task/backend"
 )
 
 // ErrDBReadOnly is an error for when the database is set to read only.

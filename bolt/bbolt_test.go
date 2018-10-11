@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/influxdata/platform/bolt"
+	"github.com/EMCECS/influx/bolt"
 )
 
 func NewTestClient() (*bolt.Client, func(), error) {

@@ -8,9 +8,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/oauth2"
-	"github.com/influxdata/platform/chronograf/organizations"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/oauth2"
+	"github.com/EMCECS/influx/chronograf/organizations"
 )
 
 type meLinks struct {

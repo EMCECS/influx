@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions"
-	"github.com/influxdata/platform/query/semantic/semantictest"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions"
+	"github.com/EMCECS/influx/query/semantic/semantictest"
 )
 
 func OperationMarshalingTestHelper(t *testing.T, data []byte, expOp *query.Operation) {

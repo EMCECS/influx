@@ -3,8 +3,8 @@ package server
 import (
 	"fmt"
 
-	"github.com/influxdata/platform/chronograf"
-	"github.com/influxdata/platform/chronograf/influx"
+	"github.com/EMCECS/influx/chronograf"
+	"github.com/EMCECS/influx/chronograf/influx"
 )
 
 // ToQueryConfig converts InfluxQL into queryconfigs

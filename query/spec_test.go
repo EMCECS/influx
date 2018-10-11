@@ -11,12 +11,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions"
-	_ "github.com/influxdata/platform/query/options"
-	"github.com/influxdata/platform/query/parser"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions"
+	_ "github.com/EMCECS/influx/query/options"
+	"github.com/EMCECS/influx/query/parser"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/values"
 )
 
 func init() {

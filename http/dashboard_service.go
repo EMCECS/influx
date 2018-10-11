@@ -8,8 +8,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/kit/errors"
 	"github.com/julienschmidt/httprouter"
 )
 

@@ -3,7 +3,7 @@ package promql
 import (
 	"fmt"
 
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx/query"
 )
 
 func ParsePromQL(promql string, opts ...Option) (interface{}, error) {

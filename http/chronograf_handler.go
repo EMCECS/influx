@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/NYTimes/gziphandler"
-	"github.com/influxdata/platform/chronograf/server"
+	"github.com/EMCECS/influx/chronograf/server"
 	"github.com/julienschmidt/httprouter"
 )
 

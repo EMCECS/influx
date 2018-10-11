@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/compiler"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/semantic/semantictest"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/compiler"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/semantic/semantictest"
+	"github.com/EMCECS/influx/query/values"
 )
 
 var CmpOptions []cmp.Option

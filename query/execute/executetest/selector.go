@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/execute"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/execute"
 )
 
 func RowSelectorFuncTestHelper(t *testing.T, selector execute.RowSelector, data query.Table, want []execute.Row) {

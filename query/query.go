@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // QueryService represents a type capable of performing queries.

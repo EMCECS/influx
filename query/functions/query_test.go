@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/influxdata/platform/query"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/query/csv"
-	"github.com/influxdata/platform/query/influxql"
-	"github.com/influxdata/platform/query/querytest"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	"github.com/EMCECS/influx/query"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/query/csv"
+	"github.com/EMCECS/influx/query/influxql"
+	"github.com/EMCECS/influx/query/querytest"
 
 	"github.com/andreyvit/diff"
 )

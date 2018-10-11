@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // TODO: rename to token.go

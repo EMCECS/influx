@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 	"github.com/julienschmidt/httprouter"
 )
 

@@ -3,8 +3,8 @@ package query
 import (
 	"io"
 
-	"github.com/influxdata/platform/query/iocounter"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/iocounter"
+	"github.com/EMCECS/influx/query/values"
 	"github.com/pkg/errors"
 )
 

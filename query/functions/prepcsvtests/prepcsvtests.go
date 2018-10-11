@@ -11,10 +11,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/influxdata/platform/query"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/query/csv"
-	"github.com/influxdata/platform/query/querytest"
+	"github.com/EMCECS/influx/query"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/query/csv"
+	"github.com/EMCECS/influx/query/querytest"
 
 	"golang.org/x/text/unicode/norm"
 )

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/task/options"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/task/options"
 )
 
 // ErrUserNotFound is an error for when we can't find a user

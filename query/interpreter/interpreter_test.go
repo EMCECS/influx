@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/query/ast"
-	"github.com/influxdata/platform/query/interpreter"
-	"github.com/influxdata/platform/query/parser"
-	"github.com/influxdata/platform/query/semantic"
-	"github.com/influxdata/platform/query/semantic/semantictest"
-	"github.com/influxdata/platform/query/values"
+	"github.com/EMCECS/influx/query/ast"
+	"github.com/EMCECS/influx/query/interpreter"
+	"github.com/EMCECS/influx/query/parser"
+	"github.com/EMCECS/influx/query/semantic"
+	"github.com/EMCECS/influx/query/semantic/semantictest"
+	"github.com/EMCECS/influx/query/values"
 )
 
 var testScope = make(map[string]values.Value)

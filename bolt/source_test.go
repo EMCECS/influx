@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/influxdata/platform"
-	platformtesting "github.com/influxdata/platform/testing"
+	"github.com/EMCECS/influx"
+	platformtesting "github.com/EMCECS/influx/testing"
 )
 
 func initSourceService(f platformtesting.SourceFields, t *testing.T) (platform.SourceService, func()) {

@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 var _ platform.AuthorizationService = (*AuthorizationService)(nil)
