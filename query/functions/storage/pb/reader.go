@@ -176,7 +176,7 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	return bi.handleRead(f, ms)
 }
 
-func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (Storage_ReadClient, *connection, error) {
+func readWithRecovery(c *connection, ctx *context.Context, req *ostorage.ReadRequest) (ostorage.Storage_ReadClient, *connection, error) {
 	stream, err := c.client.Read(*ctx, req)
 	if err == nil {
 		return stream, nil, nil
@@ -186,7 +186,7 @@ func readWithRecovery(c *connection, ctx *context.Context, req *ReadRequest) (St
 		cc, err := grpc.Dial(h, grpc.WithInsecure())
 		if err == nil {
 			println("The connection to " + h + " was reestablished, retrying to read")
-			var cl = NewStorageClient(cc)
+			var cl = ostorage.NewStorageClient(cc)
 			var newC = &connection {
 				host: h,
 				conn: cc,
