@@ -15,16 +15,16 @@ import (
 const PivotKind = "pivot"
 
 type PivotOpSpec struct {
-	RowKey   []string `json:"row_key"`
-	ColKey   []string `json:"col_key"`
-	ValueCol string   `json:"value_col"`
+	RowKey   []string `json:"rowKey"`
+	ColKey   []string `json:"colKey"`
+	ValueCol string   `json:"valueCol"`
 }
 
 var pivotSignature = query.DefaultFunctionSignature()
 
 var fromRowsBuiltin = `
 // fromRows will access a database and retrieve data aligned into time-aligned tuples, grouped by measurement.  
-fromRows = (db) => from(db:db) |> pivot(rowKey:["_time"], colKey: ["_field"], valueCol: "_value")
+fromRows = (bucket="",bucketID="") => from(bucket:bucket,bucketID:bucketID) |> pivot(rowKey:["_time"], colKey: ["_field"], valueCol: "_value")
 `
 
 func init() {

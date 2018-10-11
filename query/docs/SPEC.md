@@ -94,7 +94,7 @@ Examples:
 The following keywords are reserved and may not be used as identifiers:
 
     and    import  not  return
-    empty  in      or
+    empty  in      or   package
 
 [IMPL#256](https://github.com/influxdata/platform/issues/256) Add in and empty operator support  
 [IMPL#334](https://github.com/influxdata/platform/issues/334) Add "import" support  
@@ -163,22 +163,23 @@ Examples:
 A duration literal is a representation of a length of time.
 It has an integer part and a duration unit part.
 Multiple durations may be specified together and the resulting duration is the sum of each smaller part.
+When several durations are specified together, larger units must appear before smaller ones, and there can be no repeated units.
 
     duration_lit  = { int_lit duration_unit } .
-    duration_unit = "ns" | "us" | "µs" | "ms" | "s" | "m" | "h" | "d" | "w" | "mo" | "y" .
+    duration_unit = "y" | "mo" | "w" | "d" | "h" | "m" | "s" | "ms" | "us" | "µs" | "ns" .
 
 | Units    | Meaning                                 |
 | -----    | -------                                 |
-| ns       | nanoseconds (1 billionth of a second)   |
-| us or µs | microseconds (1 millionth of a second)  |
-| ms       | milliseconds (1 thousandth of a second) |
-| s        | second                                  |
-| m        | minute (60 seconds)                     |
-| h        | hour (60 minutes)                       |
-| d        | day                                     |
-| w        | week (7 days)                           |
-| mo       | month                                   |
 | y        | year (12 months)                        |
+| mo       | month                                   |
+| w        | week (7 days)                           |
+| d        | day                                     |
+| h        | hour (60 minutes)                       |
+| m        | minute (60 seconds)                     |
+| s        | second                                  |
+| ms       | milliseconds (1 thousandth of a second) |
+| us or µs | microseconds (1 millionth of a second)  |
+| ns       | nanoseconds (1 billionth of a second)   |
 
 Durations represent a length of time.
 Lengths of time are dependent on specific instants in time they occur and as such, durations do not represent a fixed amount of time.
@@ -455,7 +456,7 @@ Flux is lexically scoped using blocks:
 1. The scope of an option identifier is the options block.
 2. The scope of a preassigned (non-option) identifier is in the universe block.
 3. The scope of an identifier denoting a variable or function at the top level (outside any function) is the package block.
-4. The scope of a package name of an imported package is the file block of the file containing the import declaration.
+4. The scope of the name of an imported package is the file block of the file containing the import declaration.
 5. The scope of an identifier denoting a function argument is the function body.
 6. The scope of a variable assigned inside a function is the innermost containing block.
 
@@ -464,8 +465,6 @@ While the identifier of the inner assignment is in scope, it denotes the entity 
 
 Option identifiers have default assignments that are automatically defined in the _options block_.
 Because the _options block_ is the top-level block of a Flux program, options are visible/available to any and all other blocks.
-However option values may only be reassigned or overridden in the explicit block denoting the main (executable) package.
-Assignment of option identifiers in any non-executable package is strictly prohibited.
 
 The package clause is not a assignment; the package name does not appear in any scope.
 Its purpose is to identify the files belonging to the same package and to specify the default package name for import declarations.
@@ -568,12 +567,66 @@ Examples:
     baz = (y=<-) => // function body elided
     foo() |> bar() |> baz() // equivalent to baz(x:bar(y:foo()))
 
+### Program
+
+A Flux program is a sequence of statements defined by
+
+    Program = [PackageStatement] [ImportList] StatementList .
+    ImportList = { ImportStatement } .
+
 ### Statements
 
 A statement controls execution.
 
-    Statement = OptionStatement | VarAssignment | ReturnStatement |
-                ExpressionStatement | BlockStatment .
+    Statement = OptionStatement | VarAssignment |
+                ReturnStatement | ExpressionStatement | BlockStatment .
+
+#### Package statement
+
+    PackageStatement = "package" identifier .
+
+A package statement defines a package block.
+Package names must be valid Flux identifiers.
+The package statement must be the first statement of every Flux source file.
+If a file does not declare a package statement, all identifiers in that file will belong to the special _main_ package.
+
+##### package main
+
+The _main_ package is special for a few reasons:
+
+1. It defines the entrypoint of a Flux program
+2. It cannot be imported
+3. All query specifications produced after evaluating the _main_ package are coerced into producing side effects
+
+#### Import statement
+
+    ImportStatement = "import" [identifier] `"` unicode_char { unicode_char } `"`.
+
+Associated with every package is a package name and an import path.
+The import statement takes a package's import path and brings all of the identifiers defined in that package into the current scope.
+The import statment defines a namespace through which to access the imported identifiers.
+By default the identifer of this namespace is the package name unless otherwise specified.
+For example, given a variable `x` declared in package `foo`, importing `foo` and referencing `x` would look like this:
+
+```
+import "import/path/to/package/foo"
+
+foo.x
+```
+
+Or this:
+
+```
+import bar "import/path/to/package/foo"
+
+bar.x
+```
+
+A package's import path is always absolute.
+Flux does not support relative imports.
+Assigment into the namespace of an imported package is not allowed.
+A package cannot access nor modify the identifiers belonging to the imported packages of its imported packages.
+Every statement contained in an imported package is evaluated.
 
 #### Option statements
 
@@ -586,7 +639,7 @@ the `task` option to schedule a query to run periodically every hour:
         every: 1h,
     }
 
-    from(db:"metrics")
+    from(bucket:"metrics/autogen")
         |> range(start:-task.every)
         |> group(by:["level"])
         |> mean()
@@ -649,6 +702,15 @@ Examples:
     1 + 1
     f()
     a
+
+### Side Effects
+
+Side effects can occur in two ways.
+
+1. By reassigning builtin options
+2. By calling a function that produces side effects
+
+A function produces side effects when it is explicitly declared to have side effects or when it calls a function that itself produces side effects.
 
 ### Built-in functions
 
@@ -925,12 +987,13 @@ Examples:
 The execution of a query is separate and distinct from the execution of Flux the language.
 The input into the query engine is a query specification.
 
-The output of an Flux program is a query specification, which then may be passed into the query execution engine.
+The output of a Flux program is a query specification, which then may be passed into the query execution engine.
 
 ### Query specification
 
 A query specification consists of a set of operations and a set of edges between those operations.
 The operations and edges must form a directed acyclic graph (DAG).
+A query specification produces side effects when at least one of its operations produces side effects.
 
 #### Encoding
 
@@ -951,7 +1014,7 @@ Each operation has three properties:
 JSON encoding is supported and the following is an example encoding of a query:
 
 ```
-from(db:"mydatabase") |> last()
+from(bucket:"mydatabase/autogen") |> last()
 ```
 
 ```
@@ -1046,6 +1109,8 @@ Most operations output one table for every table they receive from the input str
 
 Operations that modify the group keys or values will need to regroup the tables in the output stream.
 
+An operation produces side effects when it is constructed from a function that produces side effects.
+
 ### Built-in operations
 
 #### From
@@ -1067,16 +1132,18 @@ The tables schema will include the following columns:
 
 Additionally any tags on the series will be added as columns.
 
-Example:
-
-    from(bucket:"telegraf")
 
 From has the following properties:
 
 * `bucket` string
-    The name of the bucket to query.
-* `db` string
-    The name of the database to query.
+    Bucket is the name of the bucket to query
+* `bucketID` string
+    BucketID is the string encoding of the ID of the bucket to query.
+
+Example:
+
+    from(bucket:"telegraf/autogen")
+    from(bucketID:"0261d8287f4d6000")
 
 #### Yield
 
@@ -1091,7 +1158,9 @@ Yield has the following properties:
     unique name to give to yielded results
 
 Example:
-`from(db: "telegraf") |> range(start: -5m) |> yield(name:"1")`
+`from(bucket: "telegraf/autogen") |> range(start: -5m) |> yield(name:"1")`
+
+**Note:** The `yield` function produces side effects.
 
 #### Aggregate operations
 
@@ -1138,7 +1207,7 @@ Covariance has the following properties:
 Additionally exactly two columns must be provided to the `columns` property.
 
 Example:
-`from(db: "telegraf) |> range(start:-5m) |> covariance(columns: ["x", "y"])`
+`from(bucket: "telegraf) |> range(start:-5m) |> covariance(columns: [/autogen"x", "y"])`
 
 ##### Count
 
@@ -1146,7 +1215,7 @@ Count is an aggregate operation.
 For each aggregated column, it outputs the number of non null records as an integer.
 
 Example:
-`from(db: "telegraf") |> range(start: -5m) |> count()`
+`from(bucket: "telegraf/autogen") |> range(start: -5m) |> count()`
 
 #### Duplicate 
 Duplicate will duplicate a specified column in a table
@@ -1162,7 +1231,7 @@ Example usage:
 
 Duplicate column `server` under the name `host`:
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
 	|> range(start:-5m)
 	|> filter(fn: (r) => r._measurement == "cpu")
 	|> duplicate(column: "host", as: "server")
@@ -1182,7 +1251,7 @@ Integral has the following properties:
 Example: 
 
 ```
-from(db: "telegraf") 
+from(bucket: "telegraf/autogen") 
     |> range(start: -5m) 
     |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system") 
     |> integral(unit:10s)
@@ -1195,7 +1264,7 @@ For each aggregated column, it outputs the mean of the non null records as a flo
 
 Example: 
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> filter(fn: (r) => r._measurement == "mem" AND
             r._field == "used_percent")
     |> range(start:-12h)
@@ -1224,7 +1293,7 @@ Percentile has the following properties:
 Example:
 ```
 // Determine 99th percentile cpu system usage:
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
 	|> range(start: -5m)
 	|> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
 	|> percentile(p: 0.99)
@@ -1237,7 +1306,7 @@ For each aggregated column, it outputs the skew of the non null record as a floa
 
 Example:
 ```
-from(db: "telegraf") 
+from(bucket: "telegraf/autogen") 
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
     |> skew()
@@ -1252,7 +1321,7 @@ All other input types are invalid.
 
 Example:
 ```
-from(db: "telegraf") 
+from(bucket: "telegraf/autogen") 
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
     |> spread()
@@ -1264,7 +1333,7 @@ For each aggregated column, it outputs the standard deviation of the non null re
 
 Example:
 ```
-from(db: "telegraf") 
+from(bucket: "telegraf/autogen") 
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
     |> stddev()
@@ -1278,7 +1347,7 @@ The output column type is the same as the input column type.
 
 Example:
 ```
-from(db: "telegraf") 
+from(bucket: "telegraf/autogen") 
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_system")
     |> sum()
@@ -1313,7 +1382,7 @@ First is a selector operation.
 First selects the first non null record from the input table.
 
 Example:
-`from(db:"telegraf") |> first()`
+`from(bucket:"telegraf/autogen") |> first()`
 
 ##### Last
 
@@ -1321,7 +1390,7 @@ Last is a selector operation.
 Last selects the last non null record from the input table.
 
 Example:
-`from(db: "telegraf") |> last()`
+`from(bucket: "telegraf/autogen") |> last()`
 
 ##### Max
 
@@ -1330,7 +1399,7 @@ Max selects the maximum record from the input table.
 
 Example:
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> range(start:-12h)
     |> filter(fn: (r) => r._measurement == "cpu" AND r._field == "usage_system")
     |> max()
@@ -1344,7 +1413,7 @@ Min selects the minimum record from the input table.
 Example: 
 
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> range(start:-12h)
     |> filter(fn: (r) => r._measurement == "cpu" AND r._field == "usage_system")
     |> min()
@@ -1368,7 +1437,7 @@ The following properties define how the sample is selected.
 Example:
 
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> filter(fn: (r) => r._measurement == "cpu" AND
                r._field == "usage_system")
     |> range(start:-1d)
@@ -1394,12 +1463,47 @@ Filter has the following properties:
 Example: 
 
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> range(start:-12h)
     |> filter(fn: (r) => r._measurement == "cpu" AND
                 r._field == "usage_system" AND
                 r.service == "app-server")
 ```
+
+#### Histogram
+
+Histogram approximates the cumulative distribution function of a dataset by counting data frequencies for a list of buckets.
+A bucket is defined by an upper bound where all data points that are less than or equal to the bound are counted in the bucket.
+The bucket counts are cumulative.
+
+Each input table is converted into a single output table representing a single histogram.
+The output table will have a the same group key as the input table.
+The columns not part of the group key will be removed and an upper bound column and a count column will be added.
+
+Histogram has the following properties:
+
+* `column` string
+    Column is the name of a column containing the input data values.
+    The column type must be float.
+    Defaults to `_value`.
+* `upperBoundColumn` string
+    UpperBoundColumn is the name of the column in which to store the histogram upper bounds.
+    Defaults to `le`.
+* `countColumn` string
+    CountColumn is the name of the column in which to store the histogram counts.
+    Defaults to `_value`.
+* `buckets` array of floats
+    Buckets is a list of upper bounds to use when computing the histogram frequencies.
+    Buckets should contain a bucket whose bound is the maximum value of the data set, this value can be set to positive infinity if no maximum is known.
+* `normalize` bool
+    Normalize when true will convert the counts into frequencies values between 0 and 1.
+    Normalized histograms cannot be aggregated by summing their counts.
+    Defaults to `false`.
+
+
+Example:
+
+    histogram(buckets:linearBuckets(start:0.0,width:10.0,count:10))  // compute the histogram of the data using 10 buckets from 0,10,20,...,100
 
 #### HistogramQuantile
 
@@ -1429,7 +1533,7 @@ HistogramQuantile has the following properties:
 * `upperBoundColumn` string
     UpperBoundColumn is the name of the column containing the histogram upper bounds.
     The upper bound column type must be float.
-    Defaults to `upperBound`.
+    Defaults to `le`.
 * `valueColumn` string
     ValueColumn is the name of the output column which will contain the computed quantile.
     Defaults to `_value`.
@@ -1444,6 +1548,38 @@ Example:
 
     histogramQuantile(quantile:0.9)  // compute the 90th quantile using histogram data.
 
+#### LinearBuckets
+
+LinearBuckets produces a list of linearly separated floats.
+
+LinearBuckets has the following properties:
+
+* `start` float
+    Start is the first value in the returned list.
+* `width` float
+    Width is the distance between subsequent bucket values.
+* `count` int
+    Count is the number of buckets to create.
+* `inifinity` bool
+    Infinity when true adds an additional bucket with a value of positive infinity.
+    Defaults to `true`.
+
+#### LogrithmicBuckets
+
+LogrithmicBuckets produces a list of exponentially separated floats.
+
+LogrithmicBuckets has the following properties:
+
+* `start` float
+    Start is the first value in the returned bucket list.
+* `factor` float
+    Factor is the multiplier applied to each subsequent bucket.
+* `count` int
+    Count is the number of buckets to create.
+* `inifinity` bool
+    Infinity when true adds an additional bucket with a value of positive infinity.
+    Defaults to `true`.
+
 #### Limit
 
 Limit caps the number of records in output tables to a fixed size n.
@@ -1456,7 +1592,7 @@ Limit has the following properties:
 * `n` int
     The maximum number of records to output.
 
-Example: `from(db: "telegraf") |> limit(n: 10)`
+Example: `from(bucket: "telegraf/autogen") |> limit(n: 10)`
 
 #### Map
 
@@ -1480,7 +1616,7 @@ Map has the following properties:
 
 Example:
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> filter(fn: (r) => r._measurement == "cpu" AND
                 r._field == "usage_system" AND
                 r.service == "app-server")
@@ -1490,7 +1626,7 @@ from(db:"telegraf")
 ```
 Example (creating a new table):
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> filter(fn: (r) => r._measurement == "cpu" AND
                 r._field == "usage_system" AND
                 r.service == "app-server")
@@ -1519,14 +1655,14 @@ Range has the following properties:
 
 Example:
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> range(start:-12h, stop: -15m)
     |> filter(fn: (r) => r._measurement == "cpu" AND
                r._field == "usage_system")
 ```
 Example:
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> range(start:2018-05-22T23:30:00Z, stop: 2018-05-23T00:00:00Z)
     |> filter(fn: (r) => r._measurement == "cpu" AND
                r._field == "usage_system")
@@ -1549,13 +1685,13 @@ Example usage:
 
 Rename a single column: 
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> rename(columns:{host: "server"})
 ```
 Rename all columns using `fn` parameter: 
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> rename(fn: (col) => "{col}_new")
 ```
@@ -1577,13 +1713,13 @@ Example Usage:
 
 Drop a list of columns
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
 	|> range(start: -5m)
 	|> drop(columns: ["host", "_measurement"])
 ```
 Drop columns matching a predicate:
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> drop(fn: (col) => col =~ /usage*/)
 ```
@@ -1609,13 +1745,13 @@ Keep all columns matching a predicate: `keep(fn: (col) => col =~ /inodes*/)`
 
 Keep a list of columns:
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> keep(columns: ["_time", "_value"])
 ```
 Keep all columns matching a predicate:
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> keep(fn: (col) => col =~ /inodes*/) 
 ```
@@ -1636,7 +1772,7 @@ Set has the following properties:
 
 Example: 
 ```
-from(db: "telegraf") |> set(key: "mykey", value: "myvalue")
+from(bucket: "telegraf/autogen") |> set(key: "mykey", value: "myvalue")
 ```
 
 #### Sort
@@ -1655,7 +1791,7 @@ Sort has the following properties:
 
 Example:
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> filter(fn: (r) => r._measurement == "system" AND
                r._field == "uptime")
     |> range(start:-12h)
@@ -1682,14 +1818,14 @@ Examples:
     group(except:[]) // group records into all unique groups
 
 ```
-from(db: "telegraf") 
+from(bucket: "telegraf/autogen") 
     |> range(start: -30m) 
     |> group(by: ["host", "_measurement"])
 ```
 All records are grouped by the "host" and "_measurement" columns. The resulting group key would be ["host, "_measurement"]
 
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -30m)
     |> group(except: ["_time"])
 ```
@@ -1735,7 +1871,7 @@ Window has the following properties:
 
 Example: 
 ```
-from(db:"telegraf")
+from(bucket:"telegraf/autogen")
     |> range(start:-12h)
     |> window(every:10m)
     |> max()
@@ -1788,13 +1924,13 @@ FromRows is a special application of pivot that will automatically align fields 
 Its definition is: 
 
 ```
-  fromRows = (db) => from(db:db) |> pivot(rowKey:["_time"], colKey: ["_field"], valueCol: "_value")
+  fromRows = (bucket) => from(bucket:bucket) |> pivot(rowKey:["_time"], colKey: ["_field"], valueCol: "_value")
 ```
 
 Example: 
 
 ```
-fromRows(db:"telegraf")
+fromRows(bucket:"telegraf/autogen")
   |> range(start: 2018-05-22T19:53:26Z)
 ```
 
@@ -1919,7 +2055,7 @@ Cumulative sum has the following properties:
 
 Example:
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "disk" and r._field == "used_percent")
     |> cumulativeSum(columns: ["_value"])
@@ -1943,7 +2079,7 @@ Derivative has the following properties:
     Defaults to `_time`.
 
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "disk" and r._field == "used_percent")
     |> derivative(nonNegative: true, columns: ["used_percent"])
@@ -1962,7 +2098,7 @@ Difference has the following properties:
     columns is a list of columns on which to compute the difference.
 
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
     |> range(start: -5m)
     |> filter(fn: (r) => r._measurement == "cpu" and r._field == "usage_user")
     |> difference()
@@ -1978,7 +2114,7 @@ Distinct has the following properties:
 
 Example: 
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
 	|> range(start: -5m)
 	|> filter(fn: (r) => r._measurement == "cpu")
 	|> distinct(column: "host")
@@ -1999,7 +2135,7 @@ Shift has the following properties:
     Defaults to `["_start", "_stop", "_time"]`
 Example:
 ```
-from(db: "telegraf")
+from(bucket: "telegraf/autogen")
 	|> range(start: -5m)
 	|> shift(shift: 1000h)
 ```
@@ -2070,6 +2206,8 @@ _tag1=a hum=55.3,temp=100.1 0005
 _tag1=a hum=55.4,temp=99.3 0006
 _tag1=a hum=55.5,temp=99.9 0007
 ```
+
+**Note:** The `to` function produces side effects.
 
 #### Type conversion operations
 
@@ -2235,7 +2373,7 @@ POST /v1/query
 
 
 {
-    "query": "from(db:\"mydatabase\") |> last()"
+    "query": "from(bucket:\"mydatabase/autogen\") |> last()"
 }
 ```
 
@@ -2286,7 +2424,7 @@ POST /v1/query
 
 
 {
-    "query": "from(db:\"mydatabase\") |> last()",
+    "query": "from(bucket:\"mydatabase/autogen\") |> last()",
     "dialect" : {
         "header": true,
         "annotations": ["datatype"]
@@ -2405,7 +2543,7 @@ The CSV response format support the following dialect options:
 
 For context the following example tables encode fictitious data in response to this query:
 
-    from(db:"mydb")
+    from(bucket:"mydb/autogen")
         |> range(start:2018-05-08T20:50:00Z, stop:2018-05-08T20:51:00Z)
         |> group(by:["_start","_stop", "region", "host"])
         |> mean()

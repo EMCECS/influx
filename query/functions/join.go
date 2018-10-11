@@ -30,7 +30,7 @@ type JoinOpSpec struct {
 	// The first parent is referenced by the first name and so forth.
 	// TODO(nathanielc): Change this to a map of parent operation IDs to names.
 	// Then make it possible for the transformation to map operation IDs to parent IDs.
-	TableNames map[query.OperationID]string `json:"table_names"`
+	TableNames map[query.OperationID]string `json:"tableNames"`
 	// Method is a the type of join to perform
 	Method string `json:"method"`
 	// tableNames maps each TableObject being joined to the parameter that holds it.
@@ -418,13 +418,8 @@ func (buf *streamBuffer) insert(table query.Table) {
 	builder := execute.NewColListTableBuilder(table.Key(), buf.alloc)
 	execute.AddTableCols(table, builder)
 
-	builderColumnsToTableColumns := make([]int, len(builder.Cols()))
-	for i := range builder.Cols() {
-		builderColumnsToTableColumns[i] = i
-	}
-
 	// Append the input table to this builder
-	execute.AppendTable(table, builder, builderColumnsToTableColumns)
+	execute.AppendTable(table, builder)
 
 	// Insert this table into the buffer
 	buf.data[table.Key()] = builder

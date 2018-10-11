@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/influxdata/platform"
 )
 
 // Operation denotes a single operation in a query.
@@ -71,6 +72,12 @@ type OperationSpec interface {
 	Kind() OperationKind
 }
 
+// BucketAwareOperationSpec specifies an operation that reads or writes buckets
+type BucketAwareOperationSpec interface {
+	OperationSpec
+	BucketsAccessed() (readBuckets, writeBuckets []platform.BucketFilter)
+}
+
 // OperationID is a unique ID within a query for the operation.
 type OperationID string
 
@@ -80,8 +87,8 @@ type OperationKind string
 var kindToOp = make(map[OperationKind]NewOperationSpec)
 
 // RegisterOpSpec registers an operation spec with a given kind.
-// If the kind has already been registered the call panics.
-//
+// k is a label that uniquely identifies this operation. If the kind has already been registered the call panics.
+// c is a function reference that creates a new, default-initialized opSpec for the given kind.
 // TODO:(nathanielc) make this part of RegisterMethod/RegisterFunction
 func RegisterOpSpec(k OperationKind, c NewOperationSpec) {
 	if kindToOp[k] != nil {
@@ -92,4 +99,8 @@ func RegisterOpSpec(k OperationKind, c NewOperationSpec) {
 
 func NumberOfOperations() int {
 	return len(kindToOp)
+}
+
+func OperationSpecNewFn(k OperationKind) NewOperationSpec {
+	return kindToOp[k]
 }

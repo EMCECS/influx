@@ -1,12 +1,10 @@
 import React, {PureComponent, MouseEvent} from 'react'
-import {Link} from 'react-router'
+import {Link, withRouter, WithRouterProps} from 'react-router'
 import _ from 'lodash'
 
 import ConfirmButton from 'src/shared/components/ConfirmButton'
 
-import {getDeep} from 'src/utils/wrappers'
-
-import {Dashboard, Template} from 'src/types'
+import {Dashboard} from 'src/types/v2'
 
 interface Props {
   dashboards: Dashboard[]
@@ -16,14 +14,12 @@ interface Props {
     dashboard: Dashboard
   ) => (event: MouseEvent<HTMLButtonElement>) => void
   onExportDashboard: (dashboard: Dashboard) => () => void
-  dashboardLink: string
 }
 
-class DashboardsTable extends PureComponent<Props> {
+class DashboardsTable extends PureComponent<Props & WithRouterProps> {
   public render() {
     const {
       dashboards,
-      dashboardLink,
       onCloneDashboard,
       onDeleteDashboard,
       onExportDashboard,
@@ -38,7 +34,6 @@ class DashboardsTable extends PureComponent<Props> {
         <thead>
           <tr>
             <th>Name</th>
-            <th>Template Variables</th>
             <th />
           </tr>
         </thead>
@@ -46,11 +41,10 @@ class DashboardsTable extends PureComponent<Props> {
           {_.sortBy(dashboards, d => d.name.toLowerCase()).map(dashboard => (
             <tr key={dashboard.id}>
               <td>
-                <Link to={`${dashboardLink}/dashboards/${dashboard.id}`}>
+                <Link to={`/dashboards/${dashboard.id}?${this.sourceParam}`}>
                   {dashboard.name}
                 </Link>
               </td>
-              <td>{this.getDashboardTemplates(dashboard)}</td>
               <td className="text-right">
                 <button
                   className="btn btn-xs btn-default table--show-on-row-hover"
@@ -80,20 +74,14 @@ class DashboardsTable extends PureComponent<Props> {
     )
   }
 
-  private getDashboardTemplates = (
-    dashboard: Dashboard
-  ): JSX.Element | JSX.Element[] => {
-    const templates = getDeep<Template[]>(dashboard, 'templates', [])
+  private get sourceParam(): string {
+    const {query} = this.props.location
 
-    if (templates.length) {
-      return templates.map(tv => (
-        <code className="table--temp-var" key={tv.id}>
-          {tv.tempVar}
-        </code>
-      ))
+    if (!query.sourceID) {
+      return ''
     }
 
-    return <span className="empty-string">None</span>
+    return `sourceID=${query.sourceID}`
   }
 
   private get emptyStateDashboard(): JSX.Element {
@@ -116,4 +104,4 @@ class DashboardsTable extends PureComponent<Props> {
   }
 }
 
-export default DashboardsTable
+export default withRouter(DashboardsTable)

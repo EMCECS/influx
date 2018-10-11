@@ -32,6 +32,10 @@ type Type interface {
 	// It panics if the type's Kind is not Array.
 	ElementType() Type
 
+	// Params reports the parameters of a function type.
+	// It panics if the type's Kind is not Function.
+	Params() map[string]Type
+
 	// PipeArgument reports the name of the argument that can be pipe into.
 	// It panics if the type's Kind is not Function.
 	PipeArgument() string
@@ -98,6 +102,9 @@ func (k Kind) Properties() map[string]Type {
 func (k Kind) ElementType() Type {
 	panic(fmt.Errorf("cannot get element type from kind %s", k))
 }
+func (k Kind) Params() map[string]Type {
+	panic(fmt.Errorf("cannot get parameters from kind %s", k))
+}
 func (k Kind) PipeArgument() string {
 	panic(fmt.Errorf("cannot get pipe argument name from kind %s", k))
 }
@@ -125,6 +132,9 @@ func (t *arrayType) Properties() map[string]Type {
 }
 func (t *arrayType) ElementType() Type {
 	return t.elementType
+}
+func (t *arrayType) Params() map[string]Type {
+	panic(fmt.Errorf("cannot get parameters from kind %s", t.Kind()))
 }
 func (t *arrayType) PipeArgument() string {
 	panic(fmt.Errorf("cannot get pipe argument name from kind %s", t.Kind()))
@@ -201,13 +211,20 @@ func (t *objectType) Kind() Kind {
 	return Object
 }
 func (t *objectType) PropertyType(name string) Type {
-	return t.properties[name]
+	typ, ok := t.properties[name]
+	if ok {
+		return typ
+	}
+	return Invalid
 }
 func (t *objectType) Properties() map[string]Type {
 	return t.properties
 }
 func (t *objectType) ElementType() Type {
 	panic(fmt.Errorf("cannot get element type of kind %s", t.Kind()))
+}
+func (t *objectType) Params() map[string]Type {
+	panic(fmt.Errorf("cannot get parameters from kind %s", t.Kind()))
 }
 func (t *objectType) PipeArgument() string {
 	panic(fmt.Errorf("cannot get pipe argument name from kind %s", t.Kind()))
@@ -350,6 +367,9 @@ func (t *functionType) Properties() map[string]Type {
 func (t *functionType) ElementType() Type {
 	panic(fmt.Errorf("cannot get element type of kind %s", t.Kind()))
 }
+func (t *functionType) Params() map[string]Type {
+	return t.params
+}
 func (t *functionType) PipeArgument() string {
 	return t.pipeArgument
 }
@@ -357,10 +377,6 @@ func (t *functionType) ReturnType() Type {
 	return t.returnType
 }
 func (t *functionType) typ() {}
-
-func (t *functionType) Params() map[string]Type {
-	return t.params
-}
 
 func (t *functionType) equal(o *functionType) bool {
 	if t == o {

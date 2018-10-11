@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/semantic"
 	"github.com/influxdata/platform/query/values"
 )
 
@@ -71,7 +72,7 @@ func CopyTable(t query.Table, a *Allocator) query.Table {
 		builder.AddCol(c)
 	}
 
-	AppendTable(t, builder, colMap)
+	AppendMappedTable(t, builder, colMap)
 	// ColListTableBuilders do not error
 	nb, _ := builder.Table()
 	return nb
@@ -114,24 +115,45 @@ func AddNewCols(t query.Table, builder TableBuilder) []int {
 	return colMap
 }
 
-// AppendTable append data from table t onto builder.
+// AppendMappedTable appends data from table t onto builder.
 // The colMap is a map of builder column index to table column index.
-func AppendTable(t query.Table, builder TableBuilder, colMap []int) {
+func AppendMappedTable(t query.Table, builder TableBuilder, colMap []int) {
 	if len(t.Cols()) == 0 {
 		return
 	}
 
 	t.Do(func(cr query.ColReader) error {
-		AppendCols(cr, builder, colMap)
+		AppendMappedCols(cr, builder, colMap)
 		return nil
 	})
 }
 
-// AppendCols appends all columns from cr onto builder.
+// AppendTable appends data from table t onto builder.
+// This function assumes builder and t have the same column schema.
+func AppendTable(t query.Table, builder TableBuilder) {
+	if len(t.Cols()) == 0 {
+		return
+	}
+
+	t.Do(func(cr query.ColReader) error {
+		AppendCols(cr, builder)
+		return nil
+	})
+}
+
+// AppendMappedCols appends all columns from cr onto builder.
 // The colMap is a map of builder column index to cr column index.
-func AppendCols(cr query.ColReader, builder TableBuilder, colMap []int) {
+func AppendMappedCols(cr query.ColReader, builder TableBuilder, colMap []int) {
 	for j := range builder.Cols() {
 		AppendCol(j, colMap[j], cr, builder)
+	}
+}
+
+// AppendCols appends all columns from cr onto builder.
+// This function assumes that builder and cr have the same column schema.
+func AppendCols(cr query.ColReader, builder TableBuilder) {
+	for j := range builder.Cols() {
+		AppendCol(j, j, cr, builder)
 	}
 }
 
@@ -157,7 +179,7 @@ func AppendCol(bj, cj int, cr query.ColReader, builder TableBuilder) {
 	}
 }
 
-// AppendMappedRecord appends the record from cr onto builder assuming matching columns.
+// AppendRecord appends the record from cr onto builder assuming matching columns.
 func AppendRecord(i int, cr query.ColReader, builder TableBuilder) {
 	for j, c := range builder.Cols() {
 		switch c.Type {
@@ -199,6 +221,23 @@ func AppendMappedRecord(i int, cr query.ColReader, builder TableBuilder, colMap 
 			PanicUnknownType(c.Type)
 		}
 	}
+}
+
+// ColMap writes a mapping of builder index to column reader index into colMap.
+// When colMap does not have enough capacity a new colMap is allocated.
+// The colMap is always returned
+func ColMap(colMap []int, builder TableBuilder, cr query.ColReader) []int {
+	l := len(builder.Cols())
+	if cap(colMap) < l {
+		colMap = make([]int, len(builder.Cols()))
+	} else {
+		colMap = colMap[:l]
+	}
+	cols := cr.Cols()
+	for j, c := range builder.Cols() {
+		colMap[j] = ColIdx(c.Label, cols)
+	}
+	return colMap
 }
 
 // AppendRecordForCols appends the only the columns provided from cr onto builder.
@@ -286,6 +325,7 @@ type TableBuilder interface {
 	SetFloat(i, j int, value float64)
 	SetString(i, j int, value string)
 	SetTime(i, j int, value Time)
+	SetValue(i, j int, value values.Value)
 
 	// Append will add a single value to the end of a column.  Will set the number of
 	// rows in the table to the size of the new column. It's the caller's job to make sure
@@ -296,6 +336,7 @@ type TableBuilder interface {
 	AppendFloat(j int, value float64)
 	AppendString(j int, value string)
 	AppendTime(j int, value Time)
+	AppendValue(j int, value values.Value)
 
 	// AppendBools and similar functions will append multiple values to column j.  As above,
 	// it will set the numer of rows in the table to the size of the new column.  It's the
@@ -306,6 +347,8 @@ type TableBuilder interface {
 	AppendFloats(j int, values []float64)
 	AppendStrings(j int, values []string)
 	AppendTimes(j int, values []Time)
+	// TODO(adam): determine if there's a useful API for AppendValues
+	// AppendValues(j int, values []values.Value)
 
 	// GrowBools and similar functions will extend column j by n zero-values for the respective type.
 	// If the column has enough capacity, no reallocation is necessary.  If the capacity is insufficient,
@@ -533,6 +576,44 @@ func (b ColListTableBuilder) GrowTimes(j, n int) {
 	col := b.table.cols[j].(*timeColumn)
 	col.data = b.alloc.GrowTimes(col.data, n)
 	b.table.nrows = len(col.data)
+}
+
+func (b ColListTableBuilder) SetValue(i, j int, v values.Value) {
+	switch v.Type() {
+	case semantic.Bool:
+		b.SetBool(i, j, v.Bool())
+	case semantic.Int:
+		b.SetInt(i, j, v.Int())
+	case semantic.UInt:
+		b.SetUInt(i, j, v.UInt())
+	case semantic.Float:
+		b.SetFloat(i, j, v.Float())
+	case semantic.String:
+		b.SetString(i, j, v.Str())
+	case semantic.Time:
+		b.SetTime(i, j, v.Time())
+	default:
+		panic(fmt.Errorf("unexpected value type %v", v.Type()))
+	}
+}
+
+func (b ColListTableBuilder) AppendValue(j int, v values.Value) {
+	switch v.Type() {
+	case semantic.Bool:
+		b.AppendBool(j, v.Bool())
+	case semantic.Int:
+		b.AppendInt(j, v.Int())
+	case semantic.UInt:
+		b.AppendUInt(j, v.UInt())
+	case semantic.Float:
+		b.AppendFloat(j, v.Float())
+	case semantic.String:
+		b.AppendString(j, v.Str())
+	case semantic.Time:
+		b.AppendTime(j, v.Time())
+	default:
+		panic(fmt.Errorf("unexpected value type %v", v.Type()))
+	}
 }
 
 func (b ColListTableBuilder) checkColType(j int, typ query.DataType) {

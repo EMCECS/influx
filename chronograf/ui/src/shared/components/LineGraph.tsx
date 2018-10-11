@@ -19,18 +19,19 @@ import {
 import {ColorString} from 'src/types/colors'
 import {DecimalPlaces} from 'src/types/dashboards'
 import {TimeSeriesServerResponse} from 'src/types/series'
-import {Query, Axes, TimeRange, RemoteDataState, CellType} from 'src/types'
+import {Axes, TimeRange, RemoteDataState} from 'src/types'
+import {ViewType, CellQuery} from 'src/types/v2'
 
 interface Props {
   axes: Axes
-  type: CellType
-  queries: Query[]
+  type: ViewType
+  queries: CellQuery[]
   timeRange: TimeRange
   colors: ColorString[]
   loading: RemoteDataState
   decimalPlaces: DecimalPlaces
   data: TimeSeriesServerResponse[]
-  cellID: string
+  viewID: string
   cellHeight: number
   staticLegend: boolean
   onZoom: () => void
@@ -82,7 +83,7 @@ class LineGraph extends PureComponent<LineGraphProps> {
       axes,
       type,
       colors,
-      cellID,
+      viewID,
       onZoom,
       loading,
       queries,
@@ -116,7 +117,7 @@ class LineGraph extends PureComponent<LineGraphProps> {
         <Dygraph
           type={type}
           axes={axes}
-          cellID={cellID}
+          viewID={viewID}
           colors={colors}
           onZoom={onZoom}
           labels={labels}
@@ -130,7 +131,7 @@ class LineGraph extends PureComponent<LineGraphProps> {
           containerStyle={this.containerStyle}
           handleSetHoverTime={handleSetHoverTime}
         >
-          {type === CellType.LinePlusSingleStat && (
+          {type === ViewType.LinePlusSingleStat && (
             <SingleStat
               data={data}
               lineGraph={true}
@@ -159,7 +160,7 @@ class LineGraph extends PureComponent<LineGraphProps> {
   private get isGraphFilled(): boolean {
     const {type} = this.props
 
-    if (type === CellType.LinePlusSingleStat) {
+    if (type === ViewType.LinePlusSingleStat) {
       return false
     }
 
