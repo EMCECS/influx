@@ -68,10 +68,8 @@ func Eval(itrp *interpreter.Interpreter, q string) error {
 		return err
 	}
 
-	_, decls := builtIns(itrp)
-
 	// Convert AST program to a semantic program
-	semProg, err := semantic.New(astProg, decls)
+	semProg, err := semantic.New(astProg, builtinDeclarations.Copy())
 	if err != nil {
 		return err
 	}
@@ -85,18 +83,13 @@ func Eval(itrp *interpreter.Interpreter, q string) error {
 // NewInterpreter returns an interpreter instance with
 // pre-constructed options and global scopes.
 func NewInterpreter() *interpreter.Interpreter {
+	// Make a copy of the builtin options since they can be modified
 	options := make(map[string]values.Value, len(builtinOptions))
-	globals := make(map[string]values.Value, len(builtinScope))
-
-	for k, v := range builtinScope {
-		globals[k] = v
-	}
-
 	for k, v := range builtinOptions {
 		options[k] = v
 	}
 
-	return interpreter.NewInterpreter(options, globals)
+	return interpreter.NewInterpreter(options, builtinValues)
 }
 
 func nowFunc(now time.Time) values.Function {
@@ -151,28 +144,26 @@ func ToSpec(itrp *interpreter.Interpreter, vals ...values.Value) *Spec {
 
 type CreateOperationSpec func(args Arguments, a *Administration) (OperationSpec, error)
 
-var builtinScope = make(map[string]values.Value)
-
-// TODO(Josh): Default option values should be registered similarly to built-in
-// functions. Default options should be registered in their own files
-// (or in a single file) using the RegisterBuiltInOption function which will
-// place the resolved option value in the following map.
+var builtinValues = make(map[string]values.Value)
 var builtinOptions = make(map[string]values.Value)
 var builtinDeclarations = make(semantic.DeclarationScope)
 
 // list of builtin scripts
-var builtins = make(map[string]string)
+var builtinScripts = make(map[string]string)
 var finalized bool
 
-// RegisterBuiltIn adds any variable declarations in the script to the builtin scope.
+// RegisterBuiltIn adds any variable declarations written in Flux script to the builtin scope.
 func RegisterBuiltIn(name, script string) {
 	if finalized {
 		panic(errors.New("already finalized, cannot register builtin"))
 	}
-	builtins[name] = script
+	builtinScripts[name] = script
 }
 
 // RegisterFunction adds a new builtin top level function.
+// Name is the name of the function as it would be called.
+// c is a function reference of type CreateOperationSpec
+// sig is a function signature type that specifies the names and types of each argument for the function.
 func RegisterFunction(name string, c CreateOperationSpec, sig semantic.FunctionSignature) {
 	f := function{
 		t:             semantic.NewFunctionType(sig),
@@ -185,6 +176,9 @@ func RegisterFunction(name string, c CreateOperationSpec, sig semantic.FunctionS
 
 // RegisterFunctionWithSideEffect adds a new builtin top level function that produces side effects.
 // For example, the builtin functions yield(), toKafka(), and toHTTP() all produce side effects.
+// name is the name of the function as it would be called
+// c is a function reference of type CreateOperationSpec
+// sig is a function signature type that specifies the names and types of each argument for the function
 func RegisterFunctionWithSideEffect(name string, c CreateOperationSpec, sig semantic.FunctionSignature) {
 	f := function{
 		t:             semantic.NewFunctionType(sig),
@@ -200,11 +194,11 @@ func RegisterBuiltInValue(name string, v values.Value) {
 	if finalized {
 		panic(errors.New("already finalized, cannot register builtin"))
 	}
-	if _, ok := builtinScope[name]; ok {
+	if _, ok := builtinValues[name]; ok {
 		panic(fmt.Errorf("duplicate registration for builtin %q", name))
 	}
 	builtinDeclarations[name] = semantic.NewExternalVariableDeclaration(name, v.Type())
-	builtinScope[name] = v
+	builtinValues[name] = v
 }
 
 // RegisterBuiltInOption adds the value to the builtin scope.
@@ -225,9 +219,30 @@ func FinalizeBuiltIns() {
 		panic("already finalized")
 	}
 	finalized = true
-	// Call BuiltIns to validate all built-in values are valid.
-	// A panic will occur if any value is invalid.
-	_, _ = BuiltIns()
+
+	err := evalBuiltInScripts()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func evalBuiltInScripts() error {
+	itrp := interpreter.NewMutableInterpreter(builtinOptions, builtinValues)
+	for name, script := range builtinScripts {
+		astProg, err := parser.NewAST(script)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse builtin %q", name)
+		}
+		semProg, err := semantic.New(astProg, builtinDeclarations)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create semantic graph for builtin %q", name)
+		}
+
+		if err := itrp.Eval(semProg); err != nil {
+			return errors.Wrapf(err, "failed to evaluate builtin %q", name)
+		}
+	}
+	return nil
 }
 
 var TableObjectType = semantic.NewObjectType(map[string]semantic.Type{
@@ -437,31 +452,16 @@ func DefaultFunctionSignature() semantic.FunctionSignature {
 	}
 }
 
+// BuiltIns returns a copy of the builtin values and their declarations.
 func BuiltIns() (map[string]values.Value, semantic.DeclarationScope) {
 	if !finalized {
 		panic("builtins not finalized")
 	}
-	return builtIns(NewInterpreter())
-}
-
-func builtIns(itrp *interpreter.Interpreter) (map[string]values.Value, semantic.DeclarationScope) {
-	decls := builtinDeclarations.Copy()
-
-	for name, script := range builtins {
-		astProg, err := parser.NewAST(script)
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to parse builtin %q", name))
-		}
-		semProg, err := semantic.New(astProg, decls)
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to create semantic graph for builtin %q", name))
-		}
-
-		if err := itrp.Eval(semProg); err != nil {
-			panic(errors.Wrapf(err, "failed to evaluate builtin %q", name))
-		}
+	cpy := make(map[string]values.Value, len(builtinValues))
+	for k, v := range builtinValues {
+		cpy[k] = v
 	}
-	return itrp.GlobalScope().Values(), decls
+	return cpy, builtinDeclarations.Copy()
 }
 
 type Administration struct {

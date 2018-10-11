@@ -24,6 +24,9 @@ var ErrOrgNotFound = errors.New("org not found")
 // ErrTaskNameTaken is an error for when a task name is already taken
 var ErrTaskNameTaken = errors.New("task name already in use by current user or target organization")
 
+// ErrManualQueueFull is returned when a manual run request cannot be completed.
+var ErrManualQueueFull = errors.New("manual queue at capacity")
+
 type TaskStatus string
 
 const (
@@ -64,7 +67,7 @@ type RunNotYetDueError struct {
 }
 
 func (e RunNotYetDueError) Error() string {
-	return "run not due until " + time.Unix(e.DueAt, 0).Format(time.RFC3339)
+	return "run not due until " + time.Unix(e.DueAt, 0).UTC().Format(time.RFC3339)
 }
 
 // RunCreation is returned by CreateNextRun.
@@ -120,6 +123,11 @@ type Store interface {
 	// FinishRun removes runID from the list of running tasks and if its `now` is later then last completed update it.
 	FinishRun(ctx context.Context, taskID, runID platform.ID) error
 
+	// ManuallyRunTimeRange enqueues a request to run the task with the given ID for all schedules no earlier than start and no later than end (Unix timestamps).
+	// requestedAt is the Unix timestamp when the request was initiated.
+	// ManuallyRunTimeRange must delegate to an underlying StoreTaskMeta's ManuallyRunTimeRange method.
+	ManuallyRunTimeRange(ctx context.Context, taskID platform.ID, start, end, requestedAt int64) error
+
 	// DeleteOrg deletes the org.
 	DeleteOrg(ctx context.Context, orgID platform.ID) error
 
@@ -157,7 +165,7 @@ type LogReader interface {
 	ListRuns(ctx context.Context, runFilter platform.RunFilter) ([]*platform.Run, error)
 
 	// FindRunByID finds a run given a taskID and runID.
-	FindRunByID(ctx context.Context, taskID, runID platform.ID) (*platform.Run, error)
+	FindRunByID(ctx context.Context, orgID, taskID, runID platform.ID) (*platform.Run, error)
 
 	// ListLogs lists logs for a task or a specified run of a task.
 	ListLogs(ctx context.Context, logFilter platform.LogFilter) ([]platform.Log, error)
@@ -171,7 +179,7 @@ func (NopLogReader) ListRuns(ctx context.Context, runFilter platform.RunFilter) 
 	return nil, nil
 }
 
-func (NopLogReader) FindRunByID(ctx context.Context, taskID, runID platform.ID) (*platform.Run, error) {
+func (NopLogReader) FindRunByID(ctx context.Context, orgID, taskID, runID platform.ID) (*platform.Run, error) {
 	return nil, nil
 }
 

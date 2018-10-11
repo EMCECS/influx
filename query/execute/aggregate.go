@@ -19,14 +19,27 @@ type aggregateTransformation struct {
 
 type AggregateConfig struct {
 	Columns []string `json:"columns"`
-	TimeSrc string   `json:"time_src"`
-	TimeDst string   `json:"time_dst"`
+	TimeSrc string   `json:"timeSrc"`
+	TimeDst string   `json:"timeDst"`
 }
 
 var DefaultAggregateConfig = AggregateConfig{
 	Columns: []string{DefaultValueColLabel},
 	TimeSrc: DefaultStopColLabel,
 	TimeDst: DefaultTimeColLabel,
+}
+
+func DefaultAggregateSignature() semantic.FunctionSignature {
+	return semantic.FunctionSignature{
+		Params: map[string]semantic.Type{
+			query.TableParameter: query.TableObjectType,
+			"columns":            semantic.NewArrayType(semantic.String),
+			"timeSrc":            semantic.String,
+			"timeDst":            semantic.String,
+		},
+		ReturnType:   query.TableObjectType,
+		PipeArgument: query.TableParameter,
+	}
 }
 
 func (c AggregateConfig) Copy() AggregateConfig {

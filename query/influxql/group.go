@@ -183,6 +183,10 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 	// TODO(jsternberg): We need to differentiate between various join types and this needs to be
 	// except: ["_field"] rather than joining on the _measurement. This also needs to specify what the time
 	// column should be.
+	if len(cursors) > 1 {
+		return nil, errors.New("unimplemented: joining fields within a cursor")
+	}
+
 	cur := Join(t, cursors, []string{"_measurement"}, nil)
 	if len(tags) > 0 {
 		cur = &tagsCursor{cursor: cur, tags: tags}
@@ -231,12 +235,11 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		if interval > 0 {
 			cur = &groupCursor{
 				id: t.op("window", &functions.WindowOpSpec{
-					Every:              query.Duration(math.MaxInt64),
-					Period:             query.Duration(math.MaxInt64),
-					IgnoreGlobalBounds: true,
-					TimeCol:            execute.DefaultTimeColLabel,
-					StartColLabel:      execute.DefaultStartColLabel,
-					StopColLabel:       execute.DefaultStopColLabel,
+					Every:         query.Duration(math.MaxInt64),
+					Period:        query.Duration(math.MaxInt64),
+					TimeCol:       execute.DefaultTimeColLabel,
+					StartColLabel: execute.DefaultStartColLabel,
+					StopColLabel:  execute.DefaultStopColLabel,
 				}, cur.ID()),
 				cursor: cur,
 			}
@@ -357,12 +360,11 @@ func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
 
 	if windowEvery > 0 {
 		windowOp := &functions.WindowOpSpec{
-			Every:              query.Duration(windowEvery),
-			Period:             query.Duration(windowEvery),
-			IgnoreGlobalBounds: true,
-			TimeCol:            execute.DefaultTimeColLabel,
-			StartColLabel:      execute.DefaultStartColLabel,
-			StopColLabel:       execute.DefaultStopColLabel,
+			Every:         query.Duration(windowEvery),
+			Period:        query.Duration(windowEvery),
+			TimeCol:       execute.DefaultTimeColLabel,
+			StartColLabel: execute.DefaultStartColLabel,
+			StopColLabel:  execute.DefaultStopColLabel,
 		}
 
 		if !windowStart.IsZero() {

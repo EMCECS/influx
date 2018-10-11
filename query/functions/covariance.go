@@ -15,15 +15,15 @@ const CovarianceKind = "covariance"
 
 type CovarianceOpSpec struct {
 	PearsonCorrelation bool   `json:"pearsonr"`
-	ValueDst           string `json:"value_dst"`
+	ValueDst           string `json:"valueDst"`
 	execute.AggregateConfig
 }
 
-var covarianceSignature = query.DefaultFunctionSignature()
+var covarianceSignature = execute.DefaultAggregateSignature()
 
 func init() {
 	covarianceSignature.Params["pearsonr"] = semantic.Bool
-	covarianceSignature.Params["columns"] = semantic.Array
+	covarianceSignature.Params["valueDst"] = semantic.String
 
 	query.RegisterBuiltIn("covariance", covarianceBuiltIn)
 	query.RegisterFunction(CovarianceKind, createCovarianceOpSpec, covarianceSignature)

@@ -7,7 +7,6 @@ import (
 	"github.com/influxdata/platform/query"
 	"github.com/influxdata/platform/query/execute"
 	"github.com/influxdata/platform/query/functions/storage"
-	"github.com/influxdata/platform/query/interpreter"
 	"github.com/influxdata/platform/query/plan"
 	"github.com/influxdata/platform/query/semantic"
 	"github.com/pkg/errors"
@@ -16,15 +15,14 @@ import (
 const FromKind = "from"
 
 type FromOpSpec struct {
-	Database string      `json:"db,omitempty"`
 	Bucket   string      `json:"bucket,omitempty"`
-	BucketID platform.ID `json:"bucket_id,omitempty"`
-	Hosts    []string    `json:"hosts"`
+	BucketID platform.ID `json:"bucketID,omitempty"`
 }
 
 var fromSignature = semantic.FunctionSignature{
 	Params: map[string]semantic.Type{
-		"db": semantic.String,
+		"bucket":   semantic.String,
+		"bucketID": semantic.String,
 	},
 	ReturnType: query.TableObjectType,
 }
@@ -38,12 +36,6 @@ func init() {
 
 func createFromOpSpec(args query.Arguments, a *query.Administration) (query.OperationSpec, error) {
 	spec := new(FromOpSpec)
-
-	if db, ok, err := args.GetString("db"); err != nil {
-		return nil, err
-	} else if ok {
-		spec.Database = db
-	}
 
 	if bucket, ok, err := args.GetString("bucket"); err != nil {
 		return nil, err
@@ -60,22 +52,12 @@ func createFromOpSpec(args query.Arguments, a *query.Administration) (query.Oper
 		}
 	}
 
-	if spec.Database == "" && spec.Bucket == "" && len(spec.BucketID) == 0 {
-		return nil, errors.New("must specify one of db or bucket")
+	if spec.Bucket == "" && len(spec.BucketID) == 0 {
+		return nil, errors.New("must specify one of bucket or bucketID")
 	}
-	if spec.Database != "" && spec.Bucket != "" && len(spec.BucketID) == 0 {
-		return nil, errors.New("must specify only one of db or bucket")
+	if spec.Bucket != "" && len(spec.BucketID) != 0 {
+		return nil, errors.New("must specify only one of bucket or bucketID")
 	}
-
-	if array, ok, err := args.GetArray("hosts", semantic.String); err != nil {
-		return nil, err
-	} else if ok {
-		spec.Hosts, err = interpreter.ToStringArray(array)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return spec, nil
 }
 
@@ -87,14 +69,28 @@ func (s *FromOpSpec) Kind() query.OperationKind {
 	return FromKind
 }
 
+func (s *FromOpSpec) BucketsAccessed() (readBuckets, writeBuckets []platform.BucketFilter) {
+	bf := platform.BucketFilter{}
+	if s.Bucket != "" {
+		bf.Name = &s.Bucket
+	}
+
+	if len(s.BucketID) > 0 {
+		bf.ID = &s.BucketID
+	}
+
+	if bf.ID != nil || bf.Name != nil {
+		readBuckets = append(readBuckets, bf)
+	}
+	return readBuckets, writeBuckets
+}
+
 type FromProcedureSpec struct {
-	Database string
 	Bucket   string
 	BucketID platform.ID
-	Hosts    []string
 
 	BoundsSet bool
-	Bounds    plan.BoundsSpec
+	Bounds    query.Bounds
 
 	FilterSet bool
 	Filter    *semantic.FunctionExpression
@@ -126,40 +122,31 @@ func newFromProcedure(qs query.OperationSpec, pa plan.Administration) (plan.Proc
 	}
 
 	return &FromProcedureSpec{
-		Database: spec.Database,
 		Bucket:   spec.Bucket,
 		BucketID: spec.BucketID,
-		Hosts:    spec.Hosts,
 	}, nil
 }
 
 func (s *FromProcedureSpec) Kind() plan.ProcedureKind {
 	return FromKind
 }
-func (s *FromProcedureSpec) TimeBounds() plan.BoundsSpec {
+func (s *FromProcedureSpec) TimeBounds() query.Bounds {
 	return s.Bounds
 }
 func (s *FromProcedureSpec) Copy() plan.ProcedureSpec {
 	ns := new(FromProcedureSpec)
 
-	ns.Database = s.Database
 	ns.Bucket = s.Bucket
 	if len(s.BucketID) > 0 {
 		ns.BucketID = make(platform.ID, len(s.BucketID))
 		copy(ns.BucketID, s.BucketID)
 	}
 
-	if len(s.Hosts) > 0 {
-		ns.Hosts = make([]string, len(s.Hosts))
-		copy(ns.Hosts, s.Hosts)
-	}
-
 	ns.BoundsSet = s.BoundsSet
 	ns.Bounds = s.Bounds
 
 	ns.FilterSet = s.FilterSet
-	// TODO copy predicate
-	ns.Filter = s.Filter
+	ns.Filter = s.Filter.Copy().(*semantic.FunctionExpression)
 
 	ns.DescendingSet = s.DescendingSet
 	ns.Descending = s.Descending
@@ -181,26 +168,27 @@ func (s *FromProcedureSpec) Copy() plan.ProcedureSpec {
 func createFromSource(prSpec plan.ProcedureSpec, dsid execute.DatasetID, a execute.Administration) (execute.Source, error) {
 	spec := prSpec.(*FromProcedureSpec)
 	var w execute.Window
+	bounds := a.StreamContext().Bounds()
+	if bounds == nil {
+		return nil, errors.New("nil bounds passed to from")
+	}
+
 	if spec.WindowSet {
 		w = execute.Window{
 			Every:  execute.Duration(spec.Window.Every),
 			Period: execute.Duration(spec.Window.Period),
 			Round:  execute.Duration(spec.Window.Round),
-			Start:  a.ResolveTime(spec.Window.Start),
+			Start:  bounds.Start,
 		}
 	} else {
-		duration := execute.Duration(a.ResolveTime(spec.Bounds.Stop)) - execute.Duration(a.ResolveTime(spec.Bounds.Start))
+		duration := execute.Duration(bounds.Stop) - execute.Duration(bounds.Start)
 		w = execute.Window{
 			Every:  duration,
 			Period: duration,
-			Start:  a.ResolveTime(spec.Bounds.Start),
+			Start:  bounds.Start,
 		}
 	}
 	currentTime := w.Start + execute.Time(w.Period)
-	bounds := execute.Bounds{
-		Start: a.ResolveTime(spec.Bounds.Start),
-		Stop:  a.ResolveTime(spec.Bounds.Stop),
-	}
 
 	deps := a.Dependencies()[FromKind].(storage.Dependencies)
 	orgID := a.OrganizationID()
@@ -208,17 +196,14 @@ func createFromSource(prSpec plan.ProcedureSpec, dsid execute.DatasetID, a execu
 	var bucketID platform.ID
 	// Determine bucketID
 	switch {
-	case spec.Database != "":
-		// The bucket ID will be treated as the database name
-		bucketID = platform.ID(spec.Database)
-	case len(spec.BucketID) != 0:
-		bucketID = spec.BucketID
 	case spec.Bucket != "":
 		b, ok := deps.BucketLookup.Lookup(orgID, spec.Bucket)
 		if !ok {
 			return nil, fmt.Errorf("could not find bucket %q", spec.Bucket)
 		}
 		bucketID = b
+	case len(spec.BucketID) != 0:
+		bucketID = spec.BucketID
 	}
 
 	return storage.NewSource(
@@ -227,7 +212,6 @@ func createFromSource(prSpec plan.ProcedureSpec, dsid execute.DatasetID, a execu
 		storage.ReadSpec{
 			OrganizationID:  orgID,
 			BucketID:        bucketID,
-			Hosts:           spec.Hosts,
 			Predicate:       spec.Filter,
 			PointsLimit:     spec.PointsLimit,
 			SeriesLimit:     spec.SeriesLimit,
@@ -238,7 +222,7 @@ func createFromSource(prSpec plan.ProcedureSpec, dsid execute.DatasetID, a execu
 			GroupKeys:       spec.GroupKeys,
 			AggregateMethod: spec.AggregateMethod,
 		},
-		bounds,
+		*bounds,
 		w,
 		currentTime,
 	), nil

@@ -57,18 +57,18 @@ func (s *inmem) CreateTask(_ context.Context, org, user platform.ID, script stri
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := range s.tasks {
-		if s.tasks[i].Name == task.Name {
+	for _, t := range s.tasks {
+		if t.Name == task.Name && (bytes.Equal(t.Org, org) || bytes.Equal(t.User, user)) {
 			return nil, ErrTaskNameTaken
 		}
 	}
 	s.tasks = append(s.tasks, task)
 	s.runners[id.String()] = StoreTaskMeta{
-		MaxConcurrency: int32(o.Concurrency),
-		Status:         string(TaskEnabled),
-		LastCompleted:  scheduleAfter,
-		EffectiveCron:  o.EffectiveCronString(),
-		Delay:          int32(o.Delay / time.Second),
+		MaxConcurrency:  int32(o.Concurrency),
+		Status:          string(TaskEnabled),
+		LatestCompleted: scheduleAfter,
+		EffectiveCron:   o.EffectiveCronString(),
+		Delay:           int32(o.Delay / time.Second),
 	}
 
 	return id, nil
@@ -84,20 +84,25 @@ func (s *inmem) ModifyTask(_ context.Context, id platform.ID, script string) err
 	defer s.mu.Unlock()
 
 	for n, t := range s.tasks {
-		if bytes.Equal(t.ID, id) {
-			if t.Name != op.Name {
-				for i := range s.tasks {
-					if s.tasks[i].Name == op.Name && i != n {
-						return ErrTaskNameTaken
-					}
-				}
-				t.Name = op.Name
-			}
-			t.Script = script
-			s.tasks[n] = t
-			return nil
+		if !bytes.Equal(t.ID, id) {
+			continue
 		}
+
+
+		if t.Name != op.Name {
+			for i := range s.tasks {
+				tt := s.tasks[i]
+				if tt.Name == op.Name && i != n && (bytes.Equal(tt.Org, t.Org) || bytes.Equal(tt.User, t.User)) {
+					return ErrTaskNameTaken
+				}
+			}
+			t.Name = op.Name
+		}
+		t.Script = script
+		s.tasks[n] = t
+		return nil
 	}
+
 	return fmt.Errorf("ModifyTask: record not found for %s", id)
 }
 
@@ -270,6 +275,25 @@ func (s *inmem) FinishRun(ctx context.Context, taskID, runID platform.ID) error 
 	s.runners[taskID.String()] = stm
 	s.mu.Unlock()
 
+	return nil
+}
+
+func (s *inmem) ManuallyRunTimeRange(_ context.Context, taskID platform.ID, start, end, requestedAt int64) error {
+	tid := taskID.String()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stm, ok := s.runners[tid]
+	if !ok {
+		return errors.New("task not found")
+	}
+
+	if err := stm.ManuallyRunTimeRange(start, end, requestedAt); err != nil {
+		return err
+	}
+
+	s.runners[tid] = stm
 	return nil
 }
 

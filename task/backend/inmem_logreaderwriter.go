@@ -27,7 +27,7 @@ func (r *runReaderWriter) UpdateRunState(ctx context.Context, task *StoreTask, r
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	timeSetter := func(r *platform.Run) {
-		whenStr := when.Format(time.RFC3339)
+		whenStr := when.UTC().Format(time.RFC3339)
 		switch status {
 		case RunScheduled:
 			r.ScheduledFor = whenStr
@@ -40,7 +40,8 @@ func (r *runReaderWriter) UpdateRunState(ctx context.Context, task *StoreTask, r
 
 	existingRun, ok := r.byRunID[runID.String()]
 	if !ok {
-		run := &platform.Run{ID: runID, Status: status.String()}
+		tid := append([]byte(nil), task.ID...)
+		run := &platform.Run{ID: runID, TaskID: tid, Status: status.String()}
 		timeSetter(run)
 		r.byRunID[runID.String()] = run
 		r.byTaskID[task.ID.String()] = append(r.byTaskID[task.ID.String()], run)
@@ -109,7 +110,6 @@ func (r *runReaderWriter) ListRuns(ctx context.Context, runFilter platform.RunFi
 				break
 			}
 		}
-
 	}
 
 	if runFilter.Limit != 0 && beforeIndex-afterIndex > runFilter.Limit {
@@ -119,7 +119,7 @@ func (r *runReaderWriter) ListRuns(ctx context.Context, runFilter platform.RunFi
 	return runs[afterIndex:beforeIndex], nil
 }
 
-func (r *runReaderWriter) FindRunByID(ctx context.Context, taskID, runID platform.ID) (*platform.Run, error) {
+func (r *runReaderWriter) FindRunByID(ctx context.Context, orgID, taskID, runID platform.ID) (*platform.Run, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
