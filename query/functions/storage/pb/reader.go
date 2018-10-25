@@ -33,6 +33,7 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 			h,
 			grpc.WithInsecure(),
 			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer)),
+			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer)),
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				Time:                time.Second,
 				Timeout:             3 * time.Second,
