@@ -182,33 +182,6 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	return bi.handleRead(f, ms)
 }
 
-// func readWithRecovery(c *connection, ctx *context.Context, req *ostorage.ReadRequest) (ostorage.Storage_ReadClient, *connection, error) {
-// 	stream, err := c.client.Read(*ctx, req)
-// 	if err == nil {
-// 		return stream, nil, nil
-// 	} else {
-// 		var h = c.host
-// 		println("Client read error, try to reestablish the connection to " + h + "...")
-// 		clientDeadline := time.Now().Add(time.Second)
-// 		deadlinectx, cancel := context.WithDeadline(*ctx, clientDeadline)
-// 		defer cancel()
-// 		cc, err := grpc.DialContext(deadlinectx, h, grpc.WithInsecure(), grpc.WithBlock())
-// 		if err == nil {
-// 			println("The connection to " + h + " was reestablished, retrying to read")
-// 			var cl = ostorage.NewStorageClient(cc)
-// 			var newC = &connection{
-// 				host:   h,
-// 				conn:   cc,
-// 				client: cl,
-// 			}
-// 			stream, err = cl.Read(*ctx, req)
-// 			return stream, newC, err
-// 		} else {
-// 			println("Failed to reestablish the connection to " + h + "")
-// 			return nil, nil, err
-// 		}
-// 	}
-// }
 
 func (bi *tableIterator) handleRead(f func(query.Table) error, ms *mergedStreams) error {
 	for ms.more() {
