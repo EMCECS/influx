@@ -1,4 +1,4 @@
-# InfluxData Platform [![CircleCI](https://circleci.com/gh/influxdata/platform.svg?style=svg)](https://circleci.com/gh/influxdata/platform)
+# InfluxData Platform [![Build Status](https://travis-ci.org/EMCECS/influx.svg?branch=master)](https://travis-ci.org/EMCECS/influx)
 
 This is the [monorepo](https://danluu.com/monorepo/) for InfluxData Platform, a.k.a. Influx 2.0 OSS.
 
