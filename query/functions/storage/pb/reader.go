@@ -6,17 +6,20 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	ostorage "github.com/influxdata/influxdb/services/storage"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/execute"
 	"github.com/EMCECS/influx/query/functions/storage"
 	"github.com/EMCECS/influx/query/values"
+	"github.com/gogo/protobuf/types"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	ostorage "github.com/influxdata/influxdb/services/storage"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/keepalive"
 )
 
 func NewReader(hl storage.HostLookup) (*reader, error) {
@@ -31,6 +34,12 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 			grpc.WithInsecure(),
 			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer)),
 			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer)),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                time.Second,
+				Timeout:             3 * time.Second,
+				PermitWithoutStream: true,
+			}),
+			grpc.WithBackoffMaxDelay(5*time.Second),
 		)
 		if err != nil {
 			return nil, err
@@ -144,16 +153,13 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 			}
 		}
 
-		stream, newConn, err := readWithRecovery(&c, &bi.ctx, &req)
+		if c.conn.GetState() != connectivity.Ready {
+			continue
+		}
+		stream, err := c.client.Read(bi.ctx, &req)
 
 		if err != nil {
 			println("Client read error: " + err.Error())
-		}
-
-		if newConn != nil {
-			// replace the lost connection with new one
-			bi.conns[i].conn.Close()
-			bi.conns[i] = *newConn
 		}
 
 		if stream != nil {
@@ -176,30 +182,6 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	return bi.handleRead(f, ms)
 }
 
-func readWithRecovery(c *connection, ctx *context.Context, req *ostorage.ReadRequest) (ostorage.Storage_ReadClient, *connection, error) {
-	stream, err := c.client.Read(*ctx, req)
-	if err == nil {
-		return stream, nil, nil
-	} else {
-		var h = c.host
-		println("Client read error, try to reestablish the connection to " + h + "...")
-		cc, err := grpc.Dial(h, grpc.WithInsecure())
-		if err == nil {
-			println("The connection to " + h + " was reestablished, retrying to read")
-			var cl = ostorage.NewStorageClient(cc)
-			var newC = &connection {
-				host: h,
-				conn: cc,
-				client: cl,
-			}
-			stream, err = cl.Read(*ctx, req)
-			return stream, newC, err
-		} else {
-			println("Failed to reestablish the connection to " + h + "")
-			return nil, nil, err
-		}
-	}
-}
 
 func (bi *tableIterator) handleRead(f func(query.Table) error, ms *mergedStreams) error {
 	for ms.more() {
