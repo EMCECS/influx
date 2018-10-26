@@ -138,7 +138,7 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	isGrouping := req.Group != ostorage.GroupAll
 	streams := make([]*streamState, 0, len(bi.conns))
 
-	for i, c := range bi.conns {
+	for _, c := range bi.conns {
 		if len(bi.readSpec.Hosts) > 0 {
 			// Filter down to only hosts provided
 			found := false
@@ -181,7 +181,6 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	}
 	return bi.handleRead(f, ms)
 }
-
 
 func (bi *tableIterator) handleRead(f func(query.Table) error, ms *mergedStreams) error {
 	for ms.more() {
