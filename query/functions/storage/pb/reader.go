@@ -152,10 +152,11 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 				continue
 			}
 		}
-
+		// If connection is not Ready - we skip it. Even it's Connecting.
 		if c.conn.GetState() != connectivity.Ready {
 			continue
 		}
+
 		stream, err := c.client.Read(bi.ctx, &req)
 
 		if err != nil {
