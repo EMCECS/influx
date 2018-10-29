@@ -19,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/keepalive"
 )
 
 func NewReader(hl storage.HostLookup) (*reader, error) {
@@ -34,16 +33,12 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 			grpc.WithInsecure(),
 			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer)),
 			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer)),
-			grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:                time.Second,
-				Timeout:             3 * time.Second,
-				PermitWithoutStream: true,
-			}),
 			grpc.WithBackoffMaxDelay(5*time.Second),
 		)
 		if err != nil {
 			return nil, err
 		}
+		// TODO(yurcha): Wait for bootstrap
 		conns[i] = connection{
 			host:   h,
 			conn:   conn,
