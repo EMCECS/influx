@@ -38,12 +38,16 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 		if err != nil {
 			return nil, err
 		}
-		// TODO(yurcha): Wait for bootstrap
 		conns[i] = connection{
 			host:   h,
 			conn:   conn,
 			client: ostorage.NewStorageClient(conn),
 		}
+	}
+	// blocking wait for grpc connection.
+	err := WaitConnForReady(conns, 20*time.Second)
+	if err != nil {
+		println("Bootstrap grpc connection error: " + err.Error())
 	}
 	return &reader{
 		conns: conns,
@@ -979,4 +983,23 @@ func readFrameType(frame ostorage.ReadResponse_Frame) frameType {
 
 func indexOfTag(t []ostorage.Tag, k string) int {
 	return sort.Search(len(t), func(i int) bool { return string(t[i].Key) >= k })
+}
+
+// WaitConnForReady is blocking wait processes, that ensures that all connections
+// is ready at boot
+func WaitConnForReady(conns []connection, wait time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	for _, c := range conns {
+		for {
+			s := c.conn.GetState()
+			if s == connectivity.Ready {
+				break
+			}
+			if !c.conn.WaitForStateChange(ctx, s) {
+				return ctx.Err()
+			}
+		}
+	}
+	return nil
 }
