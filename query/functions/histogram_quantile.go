@@ -2,7 +2,7 @@ package functions
 
 import (
 	"fmt"
-	"github.com/EMCECS/influx/_vendor-20181010102257/github.com/apex/log"
+	"github.com/apex/log"
 	"math"
 	"sort"
 
