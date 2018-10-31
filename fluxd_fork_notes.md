@@ -11,7 +11,7 @@ This may brake the build. It may be necessary to execute the additional steps be
     ```bash
     cd $GOPATH/src/github.com/influxdata/platform
     git remote remove origin
-    git remote add origin https://github.com/akurilov/influx
+    git remote add origin https://github.com/EMCECS/influx
     ```
 
 3. Merge the changes from the fork, get the dependencies
@@ -37,7 +37,7 @@ To reproduce try the script `tsdb_fill.sh` to prepare the 100K of points with to
 of 100K and time step of 5 minutes.
 
 ```bash
-curl -XPOST --data-urlencode 'q=from(db: "test_db") |> range(start: 1970-01-01T00:00:00.0Z) |> window(start: 1970-01-01T00:00:00.0Z, every: 1m)' http://127.0.0.1:8093/v1/query?orgID=00
+curl -XPOST --data-urlencode 'q=from(bucket: "test_db") |> range(start: 1970-01-01T00:00:00.0Z) |> window(start: 1970-01-01T00:00:00.0Z, every: 1m)' http://127.0.0.1:8093/v1/query?orgID=00
 ```
 
 No `window` function step argument (`every`) value dependence was measured in the range of `1m` to `1h`.
@@ -58,7 +58,7 @@ available. Example demonstrating the difference for the unique/dedup functions o
 
 * unique:
 ```bash
-curl -XPOST --data-urlencode 'q=from(db: "test_dedup_1") |> range(start: -100h) |> unique()' http://127.0.0.1:8093/v1/query?orgID=00
+curl -XPOST --data-urlencode 'q=from(bucket: "test_dedup_1") |> range(start: -100h) |> unique()' http://127.0.0.1:8093/v1/query?orgID=00
 #datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,double,string,string
 #partition,false,false,true,true,false,false,true,true
 #default,_result,,,,,,,
@@ -68,7 +68,7 @@ curl -XPOST --data-urlencode 'q=from(db: "test_dedup_1") |> range(start: -100h) 
 
 * dedup:
 ```bash
-curl -XPOST --data-urlencode 'q=from(db: "test_dedup_1") |> range(start: -100h) |> dedup()' http://127.0.0.1:8093/v1/query?orgID=00      
+curl -XPOST --data-urlencode 'q=from(bucket: "test_dedup_1") |> range(start: -100h) |> dedup()' http://127.0.0.1:8093/v1/query?orgID=00      
 #datatype,string,long,dateTime:RFC3339,dateTime:RFC3339,dateTime:RFC3339,double,string,string
 #partition,false,false,true,true,false,false,true,true
 #default,_result,,,,,,,
