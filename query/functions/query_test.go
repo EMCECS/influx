@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/mock"
 	"github.com/EMCECS/influx/query"
@@ -198,6 +197,16 @@ func testInfluxQL(t testing.TB, pqs query.ProxyQueryService, prefix, queryExt st
 	QueryTestCheckSpec(t, pqs, req, string(jsonOut))
 }
 
+// NormalizeNewLines normalizes \r\n (windows) and \r (mac)
+// into \n (unix)
+func NormalizeNewlines(d string) string {
+	// replace CR LF \r\n (windows) with LF \n (unix)
+	b := bytes.Replace([]byte(d), []byte{13, 10}, []byte{10}, -1)
+	// replace CF \r (mac) with LF \n (unix)
+	c := bytes.Replace(b, []byte{13}, []byte{10}, -1)
+	return string(c)
+}
+
 func QueryTestCheckSpec(t testing.TB, pqs query.ProxyQueryService, req *query.ProxyRequest, want string) {
 	t.Helper()
 
@@ -209,8 +218,10 @@ func QueryTestCheckSpec(t testing.TB, pqs query.ProxyQueryService, req *query.Pr
 	}
 
 	got := buf.String()
+	g := NormalizeNewlines(strings.TrimSpace(got))
+	w := NormalizeNewlines(strings.TrimSpace(want))
 
-	if g, w := strings.TrimSpace(got), strings.TrimSpace(want); g != w {
-		t.Errorf("result not as expected want(-) got (+):\n%v", diff.LineDiff(w, g))
+	if g != w {
+		t.Errorf("result not as expected want(-) got (+):\n%v", diff.CharacterDiff(w, g))
 	}
 }
