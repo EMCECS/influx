@@ -2,6 +2,7 @@ package functions
 
 import (
 	"fmt"
+	"github.com/apex/log"
 	"math"
 	"sort"
 
@@ -246,7 +247,8 @@ func (t *histogramQuantileTransformation) computeQuantile(cdf []bucket) (float64
 	rankIdx := -1
 	for i, b := range cdf {
 		if b.count < prevCount {
-			return 0, errors.New("histogram records counts are not monotonic")
+			b.count = prevCount
+			log.Warn("histogram records counts are not monotonic, fixing it artifically")
 		}
 		prevCount = b.count
 
