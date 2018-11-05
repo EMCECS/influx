@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/cmd/influx/internal"
-	"github.com/EMCECS/influx/http"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/bolt"
+	"github.com/influxdata/platform/cmd/influx/internal"
+	"github.com/influxdata/platform/http"
+	"github.com/influxdata/platform/internal/fs"
 	"github.com/spf13/cobra"
 )
 
@@ -83,13 +85,13 @@ func authorizationCreateF(cmd *cobra.Command, args []string) {
 		Permissions: permissions,
 	}
 
-	s := &http.AuthorizationService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newAuthorizationService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	err := s.CreateAuthorization(context.Background(), authorization)
-	if err != nil {
+	if err := s.CreateAuthorization(context.Background(), authorization); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -143,31 +145,52 @@ func init() {
 	authorizationCmd.AddCommand(authorizationFindCmd)
 }
 
-func authorizationFindF(cmd *cobra.Command, args []string) {
-	s := &http.AuthorizationService{
+func newAuthorizationService(f Flags) (platform.AuthorizationService, error) {
+	if flags.local {
+		boltFile, err := fs.BoltFile()
+		if err != nil {
+			return nil, err
+		}
+		c := bolt.NewClient()
+		c.Path = boltFile
+		if err := c.Open(context.Background()); err != nil {
+			return nil, err
+		}
+
+		return c, nil
+	}
+	return &http.AuthorizationService{
 		Addr:  flags.host,
 		Token: flags.token,
+	}, nil
+}
+
+func authorizationFindF(cmd *cobra.Command, args []string) {
+	s, err := newAuthorizationService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	filter := platform.AuthorizationFilter{}
 	if authorizationFindFlags.id != "" {
-		filter.ID = &platform.ID{}
-		err := filter.ID.DecodeFromString(authorizationFindFlags.id)
+		fID, err := platform.IDFromString(authorizationFindFlags.id)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		filter.ID = fID
 	}
 	if authorizationFindFlags.user != "" {
 		filter.User = &authorizationFindFlags.user
 	}
 	if authorizationFindFlags.userID != "" {
-		filter.UserID = &platform.ID{}
-		err := filter.UserID.DecodeFromString(authorizationFindFlags.userID)
+		uID, err := platform.IDFromString(authorizationFindFlags.userID)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		filter.UserID = uID
 	}
 
 	authorizations, _, err := s.FindAuthorizations(context.Background(), filter)
@@ -225,25 +248,26 @@ func init() {
 }
 
 func authorizationDeleteF(cmd *cobra.Command, args []string) {
-	s := &http.AuthorizationService{
-		Addr:  flags.host,
-		Token: flags.token,
-	}
-
-	id := platform.ID{}
-	if err := id.DecodeFromString(authorizationDeleteFlags.id); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	ctx := context.TODO()
-	a, err := s.FindAuthorizationByID(ctx, id)
+	s, err := newAuthorizationService(flags)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	if err := s.DeleteAuthorization(context.Background(), id); err != nil {
+	id, err := platform.IDFromString(authorizationDeleteFlags.id)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	ctx := context.TODO()
+	a, err := s.FindAuthorizationByID(ctx, *id)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if err := s.DeleteAuthorization(context.Background(), *id); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -295,12 +319,13 @@ func init() {
 }
 
 func authorizationActiveF(cmd *cobra.Command, args []string) {
-	s := &http.AuthorizationService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newAuthorizationService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	id := platform.ID{}
+	var id platform.ID
 	if err := id.DecodeFromString(authorizationActiveFlags.id); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -365,12 +390,13 @@ func init() {
 }
 
 func authorizationInactiveF(cmd *cobra.Command, args []string) {
-	s := &http.AuthorizationService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newAuthorizationService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
-	id := platform.ID{}
+	var id platform.ID
 	if err := id.DecodeFromString(authorizationInactiveFlags.id); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

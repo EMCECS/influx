@@ -11,8 +11,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/mock"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/mock"
+	platformtesting "github.com/influxdata/platform/testing"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -43,16 +44,16 @@ func TestService_handleGetViews(t *testing.T) {
 						return []*platform.View{
 							{
 								ViewContents: platform.ViewContents{
-									ID:   platform.ID("0"),
+									ID:   platformtesting.MustIDBase16("7365637465747572"),
 									Name: "hello",
 								},
-								Properties: platform.V1ViewProperties{
+								Properties: platform.LineViewProperties{
 									Type: "line",
 								},
 							},
 							{
 								ViewContents: platform.ViewContents{
-									ID:   platform.ID("2"),
+									ID:   platformtesting.MustIDBase16("6167697474697320"),
 									Name: "example",
 								},
 							},
@@ -67,45 +68,29 @@ func TestService_handleGetViews(t *testing.T) {
 				body: `
 {
   "links": {
-    "self": "/v2/views"
+    "self": "/api/v2/views"
   },
   "views": [
     {
-      "id": "30",
+      "id": "7365637465747572",
       "name": "hello",
       "links": {
-        "self": "/v2/views/30"
+        "self": "/api/v2/views/7365637465747572"
       },
       "properties": {
-        "shape": "chronograf-v1",
+        "shape": "chronograf-v2",
         "queries": null,
         "axes": null,
         "type": "line",
         "colors": null,
-        "legend": {},
-        "tableOptions": {
-          "verticalTimeAxis": false,
-          "sortBy": {
-            "internalName": "",
-            "displayName": "",
-            "visible": false
-          },
-          "wrapping": "",
-          "fixFirstColumn": false
-        },
-        "fieldOptions": null,
-        "timeFormat": "",
-        "decimalPlaces": {
-          "isEnforced": false,
-          "digits": 0
-        }
+        "legend": {}
       }
     },
     {
-      "id": "32",
+      "id": "6167697474697320",
       "name": "example",
       "links": {
-        "self": "/v2/views/32"
+        "self": "/api/v2/views/6167697474697320"
       },
       "properties": {
         "shape": "empty"
@@ -131,7 +116,7 @@ func TestService_handleGetViews(t *testing.T) {
 				body: `
 {
   "links": {
-    "self": "/v2/views"
+    "self": "/api/v2/views"
   },
   "views": []
 }`,
@@ -141,7 +126,8 @@ func TestService_handleGetViews(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewViewHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewViewHandler(mappingService)
 			h.ViewService = tt.fields.ViewService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
@@ -202,7 +188,7 @@ func TestService_handleGetView(t *testing.T) {
 					FindViewByIDF: func(ctx context.Context, id platform.ID) (*platform.View, error) {
 						return &platform.View{
 							ViewContents: platform.ViewContents{
-								ID:   mustParseID("020f755c3c082000"),
+								ID:   platformtesting.MustIDBase16("020f755c3c082000"),
 								Name: "example",
 							},
 						}, nil
@@ -220,7 +206,7 @@ func TestService_handleGetView(t *testing.T) {
   "id": "020f755c3c082000",
   "name": "example",
   "links": {
-    "self": "/v2/views/020f755c3c082000"
+    "self": "/api/v2/views/020f755c3c082000"
   },
   "properties": {
     "shape": "empty"
@@ -249,7 +235,8 @@ func TestService_handleGetView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewViewHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewViewHandler(mappingService)
 			h.ViewService = tt.fields.ViewService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
@@ -309,7 +296,7 @@ func TestService_handlePostViews(t *testing.T) {
 			fields: fields{
 				&mock.ViewService{
 					CreateViewF: func(ctx context.Context, c *platform.View) error {
-						c.ID = mustParseID("020f755c3c082000")
+						c.ID = platformtesting.MustIDBase16("020f755c3c082000")
 						return nil
 					},
 				},
@@ -317,9 +304,10 @@ func TestService_handlePostViews(t *testing.T) {
 			args: args{
 				view: &platform.View{
 					ViewContents: platform.ViewContents{
+						ID:   platformtesting.MustIDBase16("020f755c3c082000"),
 						Name: "hello",
 					},
-					Properties: platform.V1ViewProperties{
+					Properties: platform.LineViewProperties{
 						Type: "line",
 					},
 				},
@@ -332,31 +320,15 @@ func TestService_handlePostViews(t *testing.T) {
   "id": "020f755c3c082000",
   "name": "hello",
   "links": {
-    "self": "/v2/views/020f755c3c082000"
+    "self": "/api/v2/views/020f755c3c082000"
   },
   "properties": {
-    "shape": "chronograf-v1",
+    "shape": "chronograf-v2",
     "queries": null,
     "axes": null,
     "type": "line",
     "colors": null,
-    "legend": {},
-    "tableOptions": {
-      "verticalTimeAxis": false,
-      "sortBy": {
-        "internalName": "",
-        "displayName": "",
-        "visible": false
-      },
-      "wrapping": "",
-      "fixFirstColumn": false
-    },
-    "fieldOptions": null,
-    "timeFormat": "",
-    "decimalPlaces": {
-      "isEnforced": false,
-      "digits": 0
-    }
+    "legend": {}
   }
 }
 `,
@@ -366,7 +338,8 @@ func TestService_handlePostViews(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewViewHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewViewHandler(mappingService)
 			h.ViewService = tt.fields.ViewService
 
 			b, err := json.Marshal(tt.args.view)
@@ -420,7 +393,7 @@ func TestService_handleDeleteView(t *testing.T) {
 			fields: fields{
 				&mock.ViewService{
 					DeleteViewF: func(ctx context.Context, id platform.ID) error {
-						if bytes.Equal(id, mustParseID("020f755c3c082000")) {
+						if id == platformtesting.MustIDBase16("020f755c3c082000") {
 							return nil
 						}
 
@@ -455,7 +428,8 @@ func TestService_handleDeleteView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewViewHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewViewHandler(mappingService)
 			h.ViewService = tt.fields.ViewService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
@@ -517,13 +491,13 @@ func TestService_handlePatchView(t *testing.T) {
 			fields: fields{
 				&mock.ViewService{
 					UpdateViewF: func(ctx context.Context, id platform.ID, upd platform.ViewUpdate) (*platform.View, error) {
-						if bytes.Equal(id, mustParseID("020f755c3c082000")) {
+						if id == platformtesting.MustIDBase16("020f755c3c082000") {
 							return &platform.View{
 								ViewContents: platform.ViewContents{
-									ID:   mustParseID("020f755c3c082000"),
+									ID:   platformtesting.MustIDBase16("020f755c3c082000"),
 									Name: "example",
 								},
-								Properties: platform.V1ViewProperties{
+								Properties: platform.LineViewProperties{
 									Type: "line",
 								},
 							}, nil
@@ -545,31 +519,15 @@ func TestService_handlePatchView(t *testing.T) {
   "id": "020f755c3c082000",
   "name": "example",
   "links": {
-    "self": "/v2/views/020f755c3c082000"
+    "self": "/api/v2/views/020f755c3c082000"
   },
   "properties": {
-    "shape": "chronograf-v1",
+    "shape": "chronograf-v2",
     "queries": null,
     "axes": null,
     "type": "line",
     "colors": null,
-    "legend": {},
-    "tableOptions": {
-      "verticalTimeAxis": false,
-      "sortBy": {
-        "internalName": "",
-        "displayName": "",
-        "visible": false
-      },
-      "wrapping": "",
-      "fixFirstColumn": false
-    },
-    "fieldOptions": null,
-    "timeFormat": "",
-    "decimalPlaces": {
-      "isEnforced": false,
-      "digits": 0
-    }
+    "legend": {}
   }
 }
 `,
@@ -580,13 +538,13 @@ func TestService_handlePatchView(t *testing.T) {
 			fields: fields{
 				&mock.ViewService{
 					UpdateViewF: func(ctx context.Context, id platform.ID, upd platform.ViewUpdate) (*platform.View, error) {
-						if bytes.Equal(id, mustParseID("020f755c3c082000")) {
+						if id == platformtesting.MustIDBase16("020f755c3c082000") {
 							return &platform.View{
 								ViewContents: platform.ViewContents{
-									ID:   mustParseID("020f755c3c082000"),
+									ID:   platformtesting.MustIDBase16("020f755c3c082000"),
 									Name: "example",
 								},
-								Properties: platform.V1ViewProperties{
+								Properties: platform.LineViewProperties{
 									Type: "line",
 								},
 							}, nil
@@ -624,7 +582,8 @@ func TestService_handlePatchView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewViewHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewViewHandler(mappingService)
 			h.ViewService = tt.fields.ViewService
 
 			upd := platform.ViewUpdate{}
@@ -686,10 +645,47 @@ func jsonEqual(s1, s2 string) (eq bool, err error) {
 	return cmp.Equal(o1, o2), nil
 }
 
-func mustParseID(i string) platform.ID {
-	id, err := platform.IDFromString(i)
-	if err != nil {
-		panic(err)
+/* TODO: Add a go view service client
+
+func initViewService(f platformtesting.ViewFields, t *testing.T) (platform.ViewService, func()) {
+	t.Helper()
+	svc := inmem.NewService()
+	svc.IDGenerator = f.IDGenerator
+
+	ctx := context.Background()
+	for _, b := range f.Views {
+		if err := s.PutView(ctx, b); err != nil {
+			t.Fatalf("failed to populate Views")
+		}
 	}
-	return *id
+
+	handler := NewViewHandler()
+	handler.ViewService = svc
+	server := httptest.NewServer(handler)
+	client := ViewService{
+		Addr: server.URL,
+	}
+	done := server.Close
+
+	return &client, done
 }
+
+func TestViewService_CreateView(t *testing.T) {
+	platformtesting.CreateView(initViewService, t)
+}
+
+func TestViewService_FindViewByID(t *testing.T) {
+	platformtesting.FindViewByID(initViewService, t)
+}
+func TestViewService_FindViews(t *testing.T) {
+	platformtesting.FindViews(initViewService, t)
+}
+
+func TestViewService_DeleteView(t *testing.T) {
+	platformtesting.DeleteView(initViewService, t)
+}
+
+func TestViewService_UpdateView(t *testing.T) {
+	platformtesting.UpdateView(initViewService, t)
+}
+*/

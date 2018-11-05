@@ -3,27 +3,6 @@ builds:
   - goos:
     - linux
     - darwin
-    - windows
-    goarch:
-    - amd64
-    - 386
-    - arm
-    - arm64
-    goarm:
-    - 6
-    - 7
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: windows
-        goarch: 386
-    main: ./cmd/fluxd/
-    ldflags: -s -w -X main.commit={{.Commit}}
-    binary: fluxd
-  - goos:
-    - linux
-    - darwin
-    - windows
     goarch:
     - amd64
     - 386
@@ -38,12 +17,13 @@ builds:
       - goos: windows
         goarch: 386
     main: ./cmd/influx/
+    env:
+      - GO111MODULE=on
     ldflags: -s -w -X main.commit={{.Commit}}
     binary: influx
   - goos:
     - linux
     - darwin
-    - windows
     goarch:
     - amd64
     - 386
@@ -58,6 +38,10 @@ builds:
       - goos: windows
         goarch: 386
     main: ./cmd/influxd/
+    flags:
+      - -tags=assets
+    env:
+      - GO111MODULE=on
     ldflags: -s -w -X main.commit={{.Commit}}
     binary: influxd
 
@@ -84,14 +68,12 @@ s3:
 
 dockers:
   -
-    binary: fluxd
-    image: quay.io/influxdb/flux
-    dockerfile: docker/flux/Dockerfile
-    extra_files:
-      - docker/flux/entrypoint.sh
-  -
     binary: influxd
     image: quay.io/influxdb/influx
     dockerfile: docker/influxd/Dockerfile
     extra_files:
       - docker/influxd/entrypoint.sh
+
+# Do not make github release
+release:
+  disable: true

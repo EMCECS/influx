@@ -14,7 +14,7 @@ func initUserService(f platformtesting.UserFields, t *testing.T) (platform.UserS
 		t.Fatalf("failed to create new bolt client: %v", err)
 	}
 	c.IDGenerator = f.IDGenerator
-	ctx := context.TODO()
+	ctx := context.Background()
 	for _, u := range f.Users {
 		if err := c.PutUser(ctx, u); err != nil {
 			t.Fatalf("failed to populate users")

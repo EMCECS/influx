@@ -1,9 +1,10 @@
+// Package promql implements a promql parser to build flux query specifications from promql.
 package promql
 
 import (
 	"fmt"
 
-	"github.com/EMCECS/influx/query"
+	"github.com/influxdata/flux"
 )
 
 func ParsePromQL(promql string, opts ...Option) (interface{}, error) {
@@ -14,7 +15,7 @@ func ParsePromQL(promql string, opts ...Option) (interface{}, error) {
 	return f, nil
 }
 
-func Build(promql string, opts ...Option) (*query.Spec, error) {
+func Build(promql string, opts ...Option) (*flux.Spec, error) {
 	parsed, err := ParsePromQL(promql, opts...)
 	if err != nil {
 		return nil, err

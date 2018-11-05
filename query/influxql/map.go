@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/ast"
+	"github.com/influxdata/flux/execute"
+	"github.com/influxdata/flux/functions/transformations"
+	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/influxql"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/ast"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/semantic"
 )
 
 // mapCursor holds the mapping of expressions to specific fields that happens at the end of
@@ -17,10 +17,10 @@ import (
 // TODO(jsternberg): This abstraction might be useful for subqueries, but we only need the id
 // at the moment so just hold that.
 type mapCursor struct {
-	id query.OperationID
+	id flux.OperationID
 }
 
-func (c *mapCursor) ID() query.OperationID {
+func (c *mapCursor) ID() flux.OperationID {
 	return c.id
 }
 
@@ -67,13 +67,17 @@ func (t *transpilerState) mapFields(in cursor) (cursor, error) {
 			Value: value,
 		})
 	}
-	id := t.op("map", &functions.MapOpSpec{
+	id := t.op("map", &transformations.MapOpSpec{
 		Fn: &semantic.FunctionExpression{
-			Params: []*semantic.FunctionParam{{
-				Key: &semantic.Identifier{Name: "r"},
-			}},
-			Body: &semantic.ObjectExpression{
-				Properties: properties,
+			Block: &semantic.FunctionBlock{
+				Parameters: &semantic.FunctionParameters{
+					List: []*semantic.FunctionParameter{{
+						Key: &semantic.Identifier{Name: "r"},
+					}},
+				},
+				Body: &semantic.ObjectExpression{
+					Properties: properties,
+				},
 			},
 		},
 		MergeKey: true,

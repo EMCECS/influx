@@ -27,9 +27,22 @@ func (b *BucketLookup) Lookup(orgID platform.ID, name string) (platform.ID, bool
 	}
 	bucket, err := b.BucketService.FindBucket(context.Background(), filter)
 	if err != nil {
-		return nil, false
+		return platform.InvalidID(), false
 	}
 	return bucket.ID, true
+}
+
+func (b *BucketLookup) FindAllBuckets(orgID platform.ID) ([]*platform.Bucket, int) {
+	oid := platform.ID(orgID)
+	filter := platform.BucketFilter{
+		OrganizationID: &oid,
+	}
+	buckets, count, err := b.BucketService.FindBuckets(context.Background(), filter)
+	if err != nil {
+		return nil, count
+	}
+	return buckets, count
+
 }
 
 // FromOrganizationService wraps a platform.OrganizationService in the OrganizationLookup interface.
@@ -50,7 +63,7 @@ func (o *OrganizationLookup) Lookup(ctx context.Context, name string) (platform.
 	)
 
 	if err != nil {
-		return nil, false
+		return platform.InvalidID(), false
 	}
 	return org.ID, true
 }

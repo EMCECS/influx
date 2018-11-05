@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"bytes"
 	"errors"
 	"math"
 	"time"
@@ -19,7 +18,7 @@ import (
 // If runID matched a run, FinishRun returns true. Otherwise it returns false.
 func (stm *StoreTaskMeta) FinishRun(runID platform.ID) bool {
 	for i, runner := range stm.CurrentlyRunning {
-		if !bytes.Equal(runner.RunID, runID) {
+		if platform.ID(runner.RunID) != runID {
 			continue
 		}
 
@@ -93,7 +92,7 @@ func (stm *StoreTaskMeta) CreateNextRun(now int64, makeID func() (platform.ID, e
 	stm.CurrentlyRunning = append(stm.CurrentlyRunning, &StoreTaskMetaRun{
 		Now:   nextScheduledUnix,
 		Try:   1,
-		RunID: id,
+		RunID: uint64(id),
 	})
 
 	return RunCreation{
@@ -135,7 +134,7 @@ func (stm *StoreTaskMeta) createNextRunFromQueue(now, nextDue int64, sch cron.Sc
 	stm.CurrentlyRunning = append(stm.CurrentlyRunning, &StoreTaskMetaRun{
 		Now:   runNow,
 		Try:   1,
-		RunID: id,
+		RunID: uint64(id),
 
 		RangeStart:  q.Start,
 		RangeEnd:    q.End,
@@ -149,8 +148,9 @@ func (stm *StoreTaskMeta) createNextRunFromQueue(now, nextDue int64, sch cron.Sc
 
 	return RunCreation{
 		Created: QueuedRun{
-			RunID: id,
-			Now:   runNow,
+			RunID:       id,
+			Now:         runNow,
+			RequestedAt: q.RequestedAt,
 		},
 		NextDue:  nextDue,
 		HasQueue: len(stm.ManualRuns) > 0,
@@ -166,7 +166,9 @@ func (stm *StoreTaskMeta) NextDueRun() (int64, error) {
 	}
 
 	latest := stm.LatestCompleted
-	for _, cr := range stm.CurrentlyRunning {
+	currRun := make([]*StoreTaskMetaRun, len(stm.CurrentlyRunning))
+	copy(currRun, stm.CurrentlyRunning)
+	for _, cr := range currRun {
 		if cr.Now > latest {
 			latest = cr.Now
 		}
@@ -193,6 +195,11 @@ func (stm *StoreTaskMeta) ManuallyRunTimeRange(start, end, requestedAt int64) er
 		// Don't roll over in pathological case of starting at minimum int64.
 		lc = start
 	}
+	for _, mr := range stm.ManualRuns {
+		if mr.Start == start && mr.End == end {
+			return RetryAlreadyQueuedError{Start: start, End: end}
+		}
+	}
 	run := &StoreTaskMetaManualRun{
 		Start:           start,
 		End:             end,
@@ -202,4 +209,46 @@ func (stm *StoreTaskMeta) ManuallyRunTimeRange(start, end, requestedAt int64) er
 	stm.ManualRuns = append(stm.ManualRuns, run)
 
 	return nil
+}
+
+// Equal returns true if all of stm's fields compare equal to other.
+// Note that this method operates on values, unlike the other methods which operate on pointers.
+//
+// Equal is probably not very useful outside of test.
+func (stm StoreTaskMeta) Equal(other StoreTaskMeta) bool {
+	if stm.MaxConcurrency != other.MaxConcurrency ||
+		stm.LatestCompleted != other.LatestCompleted ||
+		stm.Status != other.Status ||
+		stm.EffectiveCron != other.EffectiveCron ||
+		stm.Delay != other.Delay ||
+		len(stm.CurrentlyRunning) != len(other.CurrentlyRunning) ||
+		len(stm.ManualRuns) != len(other.ManualRuns) {
+		return false
+	}
+
+	for i, o := range other.CurrentlyRunning {
+		s := stm.CurrentlyRunning[i]
+
+		if s.Now != o.Now ||
+			s.Try != o.Try ||
+			s.RunID != o.RunID ||
+			s.RangeStart != o.RangeStart ||
+			s.RangeEnd != o.RangeEnd ||
+			s.RequestedAt != o.RequestedAt {
+			return false
+		}
+	}
+
+	for i, o := range other.ManualRuns {
+		s := stm.ManualRuns[i]
+
+		if s.Start != o.Start ||
+			s.End != o.End ||
+			s.LatestCompleted != o.LatestCompleted ||
+			s.RequestedAt != o.RequestedAt {
+			return false
+		}
+	}
+
+	return true
 }

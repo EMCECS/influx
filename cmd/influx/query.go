@@ -3,17 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/http"
-	"github.com/EMCECS/influx/query"
-	_ "github.com/EMCECS/influx/query/builtin"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/functions/storage"
-	"github.com/EMCECS/influx/query/functions/storage/pb"
-	"github.com/EMCECS/influx/query/repl"
+	"github.com/influxdata/flux/repl"
+	"github.com/influxdata/platform"
+	_ "github.com/influxdata/platform/query/builtin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -28,63 +21,38 @@ var queryCmd = &cobra.Command{
 }
 
 var queryFlags struct {
-	StorageHosts string
-	OrgID        string
-	Verbose      bool
+	OrgID string
 }
 
 func init() {
-	queryCmd.PersistentFlags().StringVar(&queryFlags.StorageHosts, "storage-hosts", "localhost:8082", "Comma-separated list of storage hosts")
-	viper.BindEnv("STORAGE_HOSTS")
-	if h := viper.GetString("STORAGE_HOSTS"); h != "" {
-		queryFlags.StorageHosts = h
-	}
-
-	queryCmd.PersistentFlags().BoolVarP(&queryFlags.Verbose, "verbose", "v", false, "Verbose output")
-	viper.BindEnv("VERBOSE")
-	if viper.GetBool("VERBOSE") {
-		queryFlags.Verbose = true
-	}
-
 	queryCmd.PersistentFlags().StringVar(&queryFlags.OrgID, "org-id", "", "Organization ID")
 	viper.BindEnv("ORG_ID")
 	if h := viper.GetString("ORG_ID"); h != "" {
 		queryFlags.OrgID = h
 	}
+	queryCmd.MarkPersistentFlagRequired("org-id")
 }
 
 func fluxQueryF(cmd *cobra.Command, args []string) {
+	if flags.local {
+		fmt.Println("Local flag not supported for query command")
+		os.Exit(1)
+	}
+
 	q, err := repl.LoadQuery(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	hosts, err := storageHostReader(strings.Split(queryFlags.StorageHosts, ","))
+	var orgID platform.ID
+	err = orgID.DecodeFromString(queryFlags.OrgID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	org, err := orgID(queryFlags.OrgID)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	buckets, err := bucketService(flags.host, flags.token)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	orgs, err := orgService(flags.host, flags.token)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	r, err := getFluxREPL(hosts, buckets, orgs, org, queryFlags.Verbose)
+	r, err := getFluxREPL(flags.host, flags.token, orgID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -94,44 +62,4 @@ func fluxQueryF(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-func injectDeps(deps execute.Dependencies, hosts storage.Reader, buckets platform.BucketService, orgs platform.OrganizationService) error {
-	return functions.InjectFromDependencies(deps, storage.Dependencies{
-		Reader:             hosts,
-		BucketLookup:       query.FromBucketService(buckets),
-		OrganizationLookup: query.FromOrganizationService(orgs),
-	})
-}
-
-func storageHostReader(hosts []string) (storage.Reader, error) {
-	return pb.NewReader(storage.NewStaticLookup(hosts))
-}
-
-func bucketService(addr, token string) (platform.BucketService, error) {
-	if addr == "" {
-		return nil, fmt.Errorf("bucket host address required")
-	}
-
-	return &http.BucketService{
-		Addr:  addr,
-		Token: token,
-	}, nil
-}
-
-func orgService(addr, token string) (platform.OrganizationService, error) {
-	if addr == "" {
-		return nil, fmt.Errorf("organization host address required")
-	}
-
-	return &http.OrganizationService{
-		Addr:  addr,
-		Token: token,
-	}, nil
-}
-
-func orgID(org string) (platform.ID, error) {
-	var oid platform.ID
-	err := oid.DecodeFromString(org)
-	return oid, err
 }

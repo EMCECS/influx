@@ -2,8 +2,20 @@ package platform
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
+
+// BucketType defines known system-buckets.
+type BucketType int
+
+const (
+	// BucketTypeLogs defines the bucket ID of the system logs.
+	BucketTypeLogs = BucketType(iota + 10)
+)
+
+// InfiniteRetention is default infinite retention period.
+const InfiniteRetention = 0
 
 // Bucket is a bucket. 🎉
 type Bucket struct {
@@ -59,4 +71,9 @@ type FindOptions struct {
 	Offset     int
 	SortBy     string
 	Descending bool
+}
+
+// InternalBucketID returns the ID for an organization's specified internal bucket
+func InternalBucketID(t BucketType) (*ID, error) {
+	return IDFromString(fmt.Sprintf("%d", t))
 }

@@ -6,9 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/cmd/influx/internal"
-	"github.com/EMCECS/influx/http"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/bolt"
+	"github.com/influxdata/platform/cmd/influx/internal"
+	"github.com/influxdata/platform/http"
+	"github.com/influxdata/platform/internal/fs"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +25,7 @@ func bucketF(cmd *cobra.Command, args []string) {
 	cmd.Usage()
 }
 
-// Create Command
+// BucketCreateFlags define the Create Command
 type BucketCreateFlags struct {
 	name      string
 	org       string
@@ -41,7 +43,7 @@ func init() {
 	}
 
 	bucketCreateCmd.Flags().StringVarP(&bucketCreateFlags.name, "name", "n", "", "name of bucket that will be created")
-	bucketCreateCmd.Flags().DurationVarP(&bucketCreateFlags.retention, "retention", "r", 0, "duration data will live in bucket")
+	bucketCreateCmd.Flags().DurationVarP(&bucketCreateFlags.retention, "retention", "r", 0, "duration in nanoseconds data will live in bucket")
 	bucketCreateCmd.Flags().StringVarP(&bucketCreateFlags.org, "org", "o", "", "name of the organization that owns the bucket")
 	bucketCreateCmd.Flags().StringVarP(&bucketCreateFlags.orgID, "org-id", "", "", "id of the organization that owns the bucket")
 	bucketCreateCmd.MarkFlagRequired("name")
@@ -49,16 +51,37 @@ func init() {
 	bucketCmd.AddCommand(bucketCreateCmd)
 }
 
+func newBucketService(f Flags) (platform.BucketService, error) {
+	if flags.local {
+		boltFile, err := fs.BoltFile()
+		if err != nil {
+			return nil, err
+		}
+		c := bolt.NewClient()
+		c.Path = boltFile
+		if err := c.Open(context.Background()); err != nil {
+			return nil, err
+		}
+
+		return c, nil
+	}
+	return &http.BucketService{
+		Addr:  flags.host,
+		Token: flags.token,
+	}, nil
+}
+
 func bucketCreateF(cmd *cobra.Command, args []string) {
 	if bucketCreateFlags.org != "" && bucketCreateFlags.orgID != "" {
 		fmt.Println("must specify exactly one of org or org-id")
-		cmd.Usage()
+		_ = cmd.Usage()
 		os.Exit(1)
 	}
 
-	s := &http.BucketService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newBucketService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	b := &platform.Bucket{
@@ -71,12 +94,12 @@ func bucketCreateF(cmd *cobra.Command, args []string) {
 	}
 
 	if bucketCreateFlags.orgID != "" {
-		var id platform.ID
-		if err := id.DecodeFromString(bucketCreateFlags.orgID); err != nil {
+		id, err := platform.IDFromString(bucketCreateFlags.orgID)
+		if err != nil {
 			fmt.Printf("error parsing organization id: %v\n", err)
 			os.Exit(1)
 		}
-		b.OrganizationID = id
+		b.OrganizationID = *id
 	}
 
 	if err := s.CreateBucket(context.Background(), b); err != nil {
@@ -102,7 +125,7 @@ func bucketCreateF(cmd *cobra.Command, args []string) {
 	w.Flush()
 }
 
-// Find Command
+// BucketFindFlags define the Find Command
 type BucketFindFlags struct {
 	name  string
 	id    string
@@ -128,9 +151,10 @@ func init() {
 }
 
 func bucketFindF(cmd *cobra.Command, args []string) {
-	s := &http.BucketService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newBucketService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	filter := platform.BucketFilter{}
@@ -139,12 +163,12 @@ func bucketFindF(cmd *cobra.Command, args []string) {
 	}
 
 	if bucketFindFlags.id != "" {
-		filter.ID = &platform.ID{}
-		err := filter.ID.DecodeFromString(bucketFindFlags.id)
+		id, err := platform.IDFromString(bucketFindFlags.id)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		filter.ID = id
 	}
 
 	if bucketFindFlags.orgID != "" && bucketFindFlags.org != "" {
@@ -154,12 +178,12 @@ func bucketFindF(cmd *cobra.Command, args []string) {
 	}
 
 	if bucketFindFlags.orgID != "" {
-		filter.OrganizationID = &platform.ID{}
-		err := filter.OrganizationID.DecodeFromString(bucketFindFlags.orgID)
+		orgID, err := platform.IDFromString(bucketFindFlags.orgID)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+		filter.OrganizationID = orgID
 	}
 
 	if bucketFindFlags.org != "" {
@@ -192,7 +216,7 @@ func bucketFindF(cmd *cobra.Command, args []string) {
 	w.Flush()
 }
 
-// Update Command
+// BucketUpdateFlags define the Update Command
 type BucketUpdateFlags struct {
 	id        string
 	name      string
@@ -217,9 +241,10 @@ func init() {
 }
 
 func bucketUpdateF(cmd *cobra.Command, args []string) {
-	s := &http.BucketService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newBucketService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	var id platform.ID
@@ -260,7 +285,7 @@ func bucketUpdateF(cmd *cobra.Command, args []string) {
 	w.Flush()
 }
 
-// Delete command
+// BucketDeleteFlags define the Delete command
 type BucketDeleteFlags struct {
 	id string
 }
@@ -268,14 +293,14 @@ type BucketDeleteFlags struct {
 var bucketDeleteFlags BucketDeleteFlags
 
 func bucketDeleteF(cmd *cobra.Command, args []string) {
-	s := &http.BucketService{
-		Addr:  flags.host,
-		Token: flags.token,
+	s, err := newBucketService(flags)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	var id platform.ID
-	err := id.DecodeFromString(bucketDeleteFlags.id)
-	if err != nil {
+	if err := id.DecodeFromString(bucketDeleteFlags.id); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

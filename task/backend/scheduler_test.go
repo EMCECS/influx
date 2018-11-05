@@ -17,13 +17,67 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
+func TestScheduler_TestCancelation(t *testing.T) {
+	d := mock.NewDesiredState()
+	e := mock.NewExecutor()
+	e.WithHanging(100 * time.Millisecond)
+	rl := backend.NewInMemRunReaderWriter()
+
+	o := backend.NewScheduler(d, e, rl, 5, backend.WithLogger(zaptest.NewLogger(t)))
+	o.Start(context.Background())
+	defer o.Stop()
+
+	task := &backend.StoreTask{
+		ID: platform.ID(1),
+	}
+	meta := &backend.StoreTaskMeta{
+		MaxConcurrency:  1,
+		EffectiveCron:   "@every 1s",
+		LatestCompleted: 4,
+	}
+	d.SetTaskMeta(task.ID, *meta)
+	if err := o.ClaimTask(task, meta); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := rl.ListRuns(context.Background(), platform.RunFilter{Task: &task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = o.CancelRun(context.Background(), task.ID, runs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond) // we have to do this because the storage system we are using for the logs is eventually consistent.
+	runs, err = rl.ListRuns(context.Background(), platform.RunFilter{Task: &task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runs[0].Status != "canceled" {
+		t.Fatalf("Run not logged as canceled, but is %s", runs[0].Status)
+	}
+	// check to make sure it is really canceling, and that the status doesn't get changed to something else after it would have finished
+	time.Sleep(500 * time.Millisecond)
+	runs, err = rl.ListRuns(context.Background(), platform.RunFilter{Task: &task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runs[0].Status != "canceled" {
+		t.Fatalf("Run not actually canceled, but is %s", runs[0].Status)
+	}
+	// check for when we cancel something already canceled
+	if err = o.CancelRun(context.Background(), task.ID, runs[0].ID); err != backend.ErrRunNotFound {
+		t.Fatalf("expected ErrRunNotFound but got %s", err)
+	}
+}
+
 func TestScheduler_StartScriptOnClaim(t *testing.T) {
 	d := mock.NewDesiredState()
 	e := mock.NewExecutor()
 	o := backend.NewScheduler(d, e, backend.NopLogWriter{}, 5, backend.WithLogger(zaptest.NewLogger(t)))
+	o.Start(context.Background())
+	defer o.Stop()
 
 	task := &backend.StoreTask{
-		ID: platform.ID{1},
+		ID: platform.ID(1),
 	}
 	meta := &backend.StoreTaskMeta{
 		MaxConcurrency:  1,
@@ -42,20 +96,50 @@ func TestScheduler_StartScriptOnClaim(t *testing.T) {
 
 	// For every second, can queue for timestamps 4 and 5.
 	task = &backend.StoreTask{
-		ID: platform.ID{2},
+		ID: platform.ID(2),
 	}
 	meta = &backend.StoreTaskMeta{
 		MaxConcurrency:  99,
 		EffectiveCron:   "@every 1s",
 		LatestCompleted: 3,
+		CurrentlyRunning: []*backend.StoreTaskMetaRun{
+			&backend.StoreTaskMetaRun{
+				Now:   4,
+				RunID: uint64(10),
+			},
+		},
 	}
 	d.SetTaskMeta(task.ID, *meta)
 	if err := o.ClaimTask(task, meta); err != nil {
 		t.Fatal(err)
 	}
 
-	if n := len(d.CreatedFor(task.ID)); n != 2 {
+	if n := len(d.CreatedFor(task.ID)); n != 1 {
 		t.Fatalf("expected 2 runs queued for 'every 1s' script, but got %d", n)
+	}
+
+	if x, err := d.PollForNumberCreated(task.ID, 1); err != nil {
+		t.Fatalf("expected 1 runs queued, but got %d", len(x))
+	}
+
+	rps, err := e.PollForNumberRunning(task.ID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, rp := range rps {
+		if rp.Run().Now != 4 && rp.Run().Now != 5 {
+			t.Fatalf("unexpected running task %+v", rp)
+		}
+		rp.Finish(mock.NewRunResult(nil, false), nil)
+	}
+
+	if x, err := d.PollForNumberCreated(task.ID, 0); err != nil {
+		t.Fatalf("expected 1 runs queued, but got %d", len(x))
+	}
+
+	if _, err := e.PollForNumberRunning(task.ID, 0); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -63,9 +147,11 @@ func TestScheduler_CreateNextRunOnTick(t *testing.T) {
 	d := mock.NewDesiredState()
 	e := mock.NewExecutor()
 	o := backend.NewScheduler(d, e, backend.NopLogWriter{}, 5)
+	o.Start(context.Background())
+	defer o.Stop()
 
 	task := &backend.StoreTask{
-		ID: platform.ID{1},
+		ID: platform.ID(1),
 	}
 	meta := &backend.StoreTaskMeta{
 		MaxConcurrency:  2,
@@ -131,9 +217,11 @@ func TestScheduler_Release(t *testing.T) {
 	d := mock.NewDesiredState()
 	e := mock.NewExecutor()
 	o := backend.NewScheduler(d, e, backend.NopLogWriter{}, 5)
+	o.Start(context.Background())
+	defer o.Stop()
 
 	task := &backend.StoreTask{
-		ID: platform.ID{1},
+		ID: platform.ID(1),
 	}
 	meta := &backend.StoreTaskMeta{
 		MaxConcurrency:  99,
@@ -161,13 +249,66 @@ func TestScheduler_Release(t *testing.T) {
 	}
 }
 
+func TestScheduler_UpdateTask(t *testing.T) {
+	d := mock.NewDesiredState()
+	e := mock.NewExecutor()
+	s := backend.NewScheduler(d, e, backend.NopLogWriter{}, 3059, backend.WithLogger(zaptest.NewLogger(t)))
+	s.Start(context.Background())
+	defer s.Stop()
+
+	task := &backend.StoreTask{
+		ID: platform.ID(1),
+	}
+	meta := &backend.StoreTaskMeta{
+		MaxConcurrency:  1,
+		EffectiveCron:   "* * * * *", // Every minute.
+		LatestCompleted: 3000,
+	}
+
+	d.SetTaskMeta(task.ID, *meta)
+	if err := s.ClaimTask(task, meta); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Tick(3060)
+	p, err := e.PollForNumberRunning(task.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p[0].Finish(mock.NewRunResult(nil, false), nil)
+
+	meta.EffectiveCron = "0 * * * *"
+	meta.MaxConcurrency = 30
+	d.SetTaskMeta(task.ID, *meta)
+
+	if err := s.UpdateTask(task, meta); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Tick(3061)
+	_, err = e.PollForNumberRunning(task.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Tick(3600)
+	p, err = e.PollForNumberRunning(task.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p[0].Finish(mock.NewRunResult(nil, false), nil)
+}
+
 func TestScheduler_Queue(t *testing.T) {
 	d := mock.NewDesiredState()
 	e := mock.NewExecutor()
 	o := backend.NewScheduler(d, e, backend.NopLogWriter{}, 3059, backend.WithLogger(zaptest.NewLogger(t)))
+	o.Start(context.Background())
+	defer o.Stop()
 
 	task := &backend.StoreTask{
-		ID: platform.ID{1},
+		ID: platform.ID(1),
 	}
 	meta := &backend.StoreTaskMeta{
 		MaxConcurrency:  1,
@@ -283,10 +424,12 @@ func TestScheduler_RunLog(t *testing.T) {
 	e := mock.NewExecutor()
 	rl := backend.NewInMemRunReaderWriter()
 	s := backend.NewScheduler(d, e, rl, 5, backend.WithLogger(zaptest.NewLogger(t)))
+	s.Start(context.Background())
+	defer s.Stop()
 
 	// Claim a task that starts later.
 	task := &backend.StoreTask{
-		ID: platform.ID{1},
+		ID: platform.ID(1),
 	}
 	meta := &backend.StoreTaskMeta{
 		MaxConcurrency:  99,
@@ -368,15 +511,17 @@ func TestScheduler_Metrics(t *testing.T) {
 	d := mock.NewDesiredState()
 	e := mock.NewExecutor()
 	s := backend.NewScheduler(d, e, backend.NopLogWriter{}, 5)
+	s.Start(context.Background())
+	defer s.Stop()
 
 	reg := prom.NewRegistry()
 	// PrometheusCollector isn't part of the Scheduler interface. Yet.
 	// Still thinking about whether it should be.
-	reg.MustRegister(s.(prom.PrometheusCollector).PrometheusCollectors()...)
+	reg.MustRegister(s.PrometheusCollectors()...)
 
 	// Claim a task that starts later.
 	task := &backend.StoreTask{
-		ID: platform.ID{1},
+		ID: platform.ID(1),
 	}
 	meta := &backend.StoreTaskMeta{
 		MaxConcurrency:  99,

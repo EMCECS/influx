@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/influxdata/flux"
 )
 
 // LoggingServiceBridge implements ProxyQueryService and logs the queries while consuming a QueryService interface.
@@ -15,7 +17,7 @@ type LoggingServiceBridge struct {
 
 // Query executes and logs the query.
 func (s *LoggingServiceBridge) Query(ctx context.Context, w io.Writer, req *ProxyRequest) (n int64, err error) {
-	var stats Statistics
+	var stats flux.Statistics
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -40,7 +42,7 @@ func (s *LoggingServiceBridge) Query(ctx context.Context, w io.Writer, req *Prox
 	}
 	// Check if this result iterator reports stats. We call this defer before cancel because
 	// the query needs to be finished before it will have valid statistics.
-	if s, ok := results.(Statisticser); ok {
+	if s, ok := results.(flux.Statisticser); ok {
 		defer func() {
 			stats = s.Statistics()
 		}()

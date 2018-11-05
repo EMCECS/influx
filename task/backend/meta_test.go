@@ -47,7 +47,9 @@ func TestMeta_CreateNextRun(t *testing.T) {
 
 	idErr := errors.New("error making ID")
 	*bad = good
-	if _, err := bad.CreateNextRun(120, func() (platform.ID, error) { return nil, idErr }); err != idErr {
+	if _, err := bad.CreateNextRun(120, func() (platform.ID, error) {
+		return platform.InvalidID(), idErr
+	}); err != idErr {
 		t.Fatalf("expected id creation error, got %v", err)
 	}
 
@@ -55,10 +57,10 @@ func TestMeta_CreateNextRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rc.Created.TaskID != nil {
+	if rc.Created.TaskID.Valid() {
 		t.Fatalf("CreateNextRun should not have set task ID; got %v", rc.Created.TaskID)
 	}
-	if rc.Created.RunID == nil {
+	if !rc.Created.RunID.Valid() {
 		t.Fatal("CreateNextRun should have set run ID but didn't")
 	}
 	if rc.Created.Now != 120 {
@@ -72,10 +74,10 @@ func TestMeta_CreateNextRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rc.Created.TaskID != nil {
+	if rc.Created.TaskID.Valid() {
 		t.Fatalf("CreateNextRun should not have set task ID; got %v", rc.Created.TaskID)
 	}
-	if rc.Created.RunID == nil {
+	if !rc.Created.RunID.Valid() {
 		t.Fatal("CreateNextRun should have set run ID but didn't")
 	}
 	if rc.Created.Now != 180 {
@@ -255,4 +257,25 @@ func TestMeta_ManuallyRunTimeRange(t *testing.T) {
 	if len(stm.ManualRuns) != maxQueueSize {
 		t.Fatalf("expected to be unable to exceed queue size of %d; got %d", maxQueueSize, len(stm.ManualRuns))
 	}
+
+	// Reset manual runs.
+	stm.ManualRuns = stm.ManualRuns[:0]
+
+	// Duplicate manual run with single timestamp should be rejected.
+	if err := stm.ManuallyRunTimeRange(1, 1, 2); err != nil {
+		t.Fatal(err)
+	}
+	if exp, err := (backend.RetryAlreadyQueuedError{Start: 1, End: 1}), stm.ManuallyRunTimeRange(1, 1, 3); err != exp {
+		t.Fatalf("expected %v, got %v", exp, err)
+	}
+
+	// Duplicate manual run with time range should be rejected.
+	if err := stm.ManuallyRunTimeRange(100, 200, 201); err != nil {
+		t.Fatal(err)
+	}
+	if exp, err := (backend.RetryAlreadyQueuedError{Start: 100, End: 200}), stm.ManuallyRunTimeRange(100, 200, 202); err != exp {
+		t.Fatalf("expected %v, got %v", exp, err)
+	}
+
+	// Not currently enforcing one way or another when a newly requested time range overlaps with an existing one.
 }

@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/mock"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/inmem"
+	"github.com/influxdata/platform/mock"
+	platformtesting "github.com/influxdata/platform/testing"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -38,24 +41,33 @@ func TestService_handleGetDashboards(t *testing.T) {
 			name: "get all dashboards",
 			fields: fields{
 				&mock.DashboardService{
-					FindDashboardsF: func(ctx context.Context, filter platform.DashboardFilter) ([]*platform.Dashboard, int, error) {
+					FindDashboardsF: func(ctx context.Context, filter platform.DashboardFilter, opts platform.FindOptions) ([]*platform.Dashboard, int, error) {
 						return []*platform.Dashboard{
 							{
-								ID:   platform.ID("0"),
-								Name: "hello",
+								ID:          platformtesting.MustIDBase16("da7aba5e5d81e550"),
+								Name:        "hello",
+								Description: "oh hello there!",
+								Meta: platform.DashboardMeta{
+									CreatedAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
+									UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+								},
 								Cells: []*platform.Cell{
 									{
-										ID:     platform.ID("0"),
+										ID:     platformtesting.MustIDBase16("da7aba5e5d81e550"),
 										X:      1,
 										Y:      2,
 										W:      3,
 										H:      4,
-										ViewID: platform.ID("1"),
+										ViewID: platformtesting.MustIDBase16("ba0bab707a11ed12"),
 									},
 								},
 							},
 							{
-								ID:   platform.ID("2"),
+								ID: platformtesting.MustIDBase16("0ca2204eca2204e0"),
+								Meta: platform.DashboardMeta{
+									CreatedAt: time.Date(2012, time.November, 10, 23, 0, 0, 0, time.UTC),
+									UpdatedAt: time.Date(2012, time.November, 10, 24, 0, 0, 0, time.UTC),
+								},
 								Name: "example",
 							},
 						}, 2, nil
@@ -69,38 +81,50 @@ func TestService_handleGetDashboards(t *testing.T) {
 				body: `
 {
   "links": {
-    "self": "/v2/dashboards"
+    "self": "/api/v2/dashboards"
   },
   "dashboards": [
     {
-      "id": "30",
+      "id": "da7aba5e5d81e550",
       "name": "hello",
+      "description": "oh hello there!",
+      "meta": {
+        "createdAt": "2009-11-10T23:00:00Z",
+        "updatedAt": "2009-11-11T00:00:00Z"
+      },
       "cells": [
         {
-          "id": "30",
+          "id": "da7aba5e5d81e550",
           "x": 1,
           "y": 2,
           "w": 3,
           "h": 4,
-          "viewID": "31",
+          "viewID": "ba0bab707a11ed12",
           "links": {
-            "self": "/v2/dashboards/30/cells/30",
-            "view": "/v2/views/31"
+            "self": "/api/v2/dashboards/da7aba5e5d81e550/cells/da7aba5e5d81e550",
+            "view": "/api/v2/views/ba0bab707a11ed12"
           }
         }
       ],
       "links": {
-        "self": "/v2/dashboards/30",
-        "cells": "/v2/dashboards/30/cells"
+        "self": "/api/v2/dashboards/da7aba5e5d81e550",
+        "cells": "/api/v2/dashboards/da7aba5e5d81e550/cells",
+        "log": "/api/v2/dashboards/da7aba5e5d81e550/log"
       }
     },
     {
-      "id": "32",
+      "id": "0ca2204eca2204e0",
       "name": "example",
+      "description": "",
+      "meta": {
+        "createdAt": "2012-11-10T23:00:00Z",
+        "updatedAt": "2012-11-11T00:00:00Z"
+      },
       "cells": [],
       "links": {
-        "self": "/v2/dashboards/32",
-        "cells": "/v2/dashboards/32/cells"
+        "self": "/api/v2/dashboards/0ca2204eca2204e0",
+        "log": "/api/v2/dashboards/0ca2204eca2204e0/log",
+        "cells": "/api/v2/dashboards/0ca2204eca2204e0/cells"
       }
     }
   ]
@@ -112,7 +136,7 @@ func TestService_handleGetDashboards(t *testing.T) {
 			name: "get all dashboards when there are none",
 			fields: fields{
 				&mock.DashboardService{
-					FindDashboardsF: func(ctx context.Context, filter platform.DashboardFilter) ([]*platform.Dashboard, int, error) {
+					FindDashboardsF: func(ctx context.Context, filter platform.DashboardFilter, opts platform.FindOptions) ([]*platform.Dashboard, int, error) {
 						return []*platform.Dashboard{}, 0, nil
 					},
 				},
@@ -124,7 +148,7 @@ func TestService_handleGetDashboards(t *testing.T) {
 				body: `
 {
   "links": {
-    "self": "/v2/dashboards"
+    "self": "/api/v2/dashboards"
   },
   "dashboards": []
 }`,
@@ -134,7 +158,8 @@ func TestService_handleGetDashboards(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
@@ -193,18 +218,22 @@ func TestService_handleGetDashboard(t *testing.T) {
 			fields: fields{
 				&mock.DashboardService{
 					FindDashboardByIDF: func(ctx context.Context, id platform.ID) (*platform.Dashboard, error) {
-						if bytes.Equal(id, mustParseID("020f755c3c082000")) {
+						if id == platformtesting.MustIDBase16("020f755c3c082000") {
 							return &platform.Dashboard{
-								ID:   mustParseID("020f755c3c082000"),
+								ID: platformtesting.MustIDBase16("020f755c3c082000"),
+								Meta: platform.DashboardMeta{
+									CreatedAt: time.Date(2012, time.November, 10, 23, 0, 0, 0, time.UTC),
+									UpdatedAt: time.Date(2012, time.November, 10, 24, 0, 0, 0, time.UTC),
+								},
 								Name: "hello",
 								Cells: []*platform.Cell{
 									{
-										ID:     platform.ID("0"),
+										ID:     platformtesting.MustIDBase16("da7aba5e5d81e550"),
 										X:      1,
 										Y:      2,
 										W:      3,
 										H:      4,
-										ViewID: platform.ID("1"),
+										ViewID: platformtesting.MustIDBase16("ba0bab707a11ed12"),
 									},
 								},
 							}, nil
@@ -224,23 +253,29 @@ func TestService_handleGetDashboard(t *testing.T) {
 {
   "id": "020f755c3c082000",
   "name": "hello",
+  "description": "",
+  "meta": {
+    "createdAt": "2012-11-10T23:00:00Z",
+    "updatedAt": "2012-11-11T00:00:00Z"
+  },
   "cells": [
     {
-      "id": "30",
+      "id": "da7aba5e5d81e550",
       "x": 1,
       "y": 2,
       "w": 3,
       "h": 4,
-      "viewID": "31",
+      "viewID": "ba0bab707a11ed12",
       "links": {
-        "self": "/v2/dashboards/020f755c3c082000/cells/30",
-        "view": "/v2/views/31"
+        "self": "/api/v2/dashboards/020f755c3c082000/cells/da7aba5e5d81e550",
+        "view": "/api/v2/views/ba0bab707a11ed12"
       }
     }
   ],
   "links": {
-    "self": "/v2/dashboards/020f755c3c082000",
-    "cells": "/v2/dashboards/020f755c3c082000/cells"
+    "self": "/api/v2/dashboards/020f755c3c082000",
+    "log": "/api/v2/dashboards/020f755c3c082000/log",
+    "cells": "/api/v2/dashboards/020f755c3c082000/cells"
   }
 }
 `,
@@ -266,13 +301,14 @@ func TestService_handleGetDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
 
 			r = r.WithContext(context.WithValue(
-				context.TODO(),
+				context.Background(),
 				httprouter.ParamsKey,
 				httprouter.Params{
 					{
@@ -326,22 +362,28 @@ func TestService_handlePostDashboard(t *testing.T) {
 			fields: fields{
 				&mock.DashboardService{
 					CreateDashboardF: func(ctx context.Context, c *platform.Dashboard) error {
-						c.ID = mustParseID("020f755c3c082000")
+						c.ID = platformtesting.MustIDBase16("020f755c3c082000")
+						c.Meta = platform.DashboardMeta{
+							CreatedAt: time.Date(2012, time.November, 10, 23, 0, 0, 0, time.UTC),
+							UpdatedAt: time.Date(2012, time.November, 10, 24, 0, 0, 0, time.UTC),
+						}
 						return nil
 					},
 				},
 			},
 			args: args{
 				dashboard: &platform.Dashboard{
-					Name: "hello",
+					ID:          platformtesting.MustIDBase16("020f755c3c082000"),
+					Name:        "hello",
+					Description: "howdy there",
 					Cells: []*platform.Cell{
 						{
-							ID:     platform.ID("0"),
+							ID:     platformtesting.MustIDBase16("da7aba5e5d81e550"),
 							X:      1,
 							Y:      2,
 							W:      3,
 							H:      4,
-							ViewID: platform.ID("1"),
+							ViewID: platformtesting.MustIDBase16("ba0bab707a11ed12"),
 						},
 					},
 				},
@@ -353,23 +395,29 @@ func TestService_handlePostDashboard(t *testing.T) {
 {
   "id": "020f755c3c082000",
   "name": "hello",
+  "description": "howdy there",
+  "meta": {
+    "createdAt": "2012-11-10T23:00:00Z",
+    "updatedAt": "2012-11-11T00:00:00Z"
+  },
   "cells": [
     {
-      "id": "30",
+      "id": "da7aba5e5d81e550",
       "x": 1,
       "y": 2,
       "w": 3,
       "h": 4,
-      "viewID": "31",
+      "viewID": "ba0bab707a11ed12",
       "links": {
-        "self": "/v2/dashboards/020f755c3c082000/cells/30",
-        "view": "/v2/views/31"
+        "self": "/api/v2/dashboards/020f755c3c082000/cells/da7aba5e5d81e550",
+        "view": "/api/v2/views/ba0bab707a11ed12"
       }
     }
   ],
   "links": {
-    "self": "/v2/dashboards/020f755c3c082000",
-    "cells": "/v2/dashboards/020f755c3c082000/cells"
+    "self": "/api/v2/dashboards/020f755c3c082000",
+    "log": "/api/v2/dashboards/020f755c3c082000/log",
+    "cells": "/api/v2/dashboards/020f755c3c082000/cells"
   }
 }
 `,
@@ -379,7 +427,8 @@ func TestService_handlePostDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			b, err := json.Marshal(tt.args.dashboard)
@@ -433,7 +482,7 @@ func TestService_handleDeleteDashboard(t *testing.T) {
 			fields: fields{
 				&mock.DashboardService{
 					DeleteDashboardF: func(ctx context.Context, id platform.ID) error {
-						if bytes.Equal(id, mustParseID("020f755c3c082000")) {
+						if id == platformtesting.MustIDBase16("020f755c3c082000") {
 							return nil
 						}
 
@@ -468,13 +517,14 @@ func TestService_handleDeleteDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
 
 			r = r.WithContext(context.WithValue(
-				context.TODO(),
+				context.Background(),
 				httprouter.ParamsKey,
 				httprouter.Params{
 					{
@@ -509,9 +559,8 @@ func TestService_handlePatchDashboard(t *testing.T) {
 		DashboardService platform.DashboardService
 	}
 	type args struct {
-		id    string
-		name  string
-		cells []*platform.Cell
+		id   string
+		name string
 	}
 	type wants struct {
 		statusCode  int
@@ -530,18 +579,22 @@ func TestService_handlePatchDashboard(t *testing.T) {
 			fields: fields{
 				&mock.DashboardService{
 					UpdateDashboardF: func(ctx context.Context, id platform.ID, upd platform.DashboardUpdate) (*platform.Dashboard, error) {
-						if bytes.Equal(id, mustParseID("020f755c3c082000")) {
+						if id == platformtesting.MustIDBase16("020f755c3c082000") {
 							d := &platform.Dashboard{
-								ID:   mustParseID("020f755c3c082000"),
+								ID:   platformtesting.MustIDBase16("020f755c3c082000"),
 								Name: "hello",
+								Meta: platform.DashboardMeta{
+									CreatedAt: time.Date(2012, time.November, 10, 23, 0, 0, 0, time.UTC),
+									UpdatedAt: time.Date(2012, time.November, 10, 25, 0, 0, 0, time.UTC),
+								},
 								Cells: []*platform.Cell{
 									{
-										ID:     platform.ID("0"),
+										ID:     platformtesting.MustIDBase16("da7aba5e5d81e550"),
 										X:      1,
 										Y:      2,
 										W:      3,
 										H:      4,
-										ViewID: platform.ID("1"),
+										ViewID: platformtesting.MustIDBase16("ba0bab707a11ed12"),
 									},
 								},
 							}
@@ -568,23 +621,29 @@ func TestService_handlePatchDashboard(t *testing.T) {
 {
   "id": "020f755c3c082000",
   "name": "example",
+  "description": "",
+  "meta": {
+    "createdAt": "2012-11-10T23:00:00Z",
+    "updatedAt": "2012-11-11T01:00:00Z"
+  },
   "cells": [
     {
-      "id": "30",
+      "id": "da7aba5e5d81e550",
       "x": 1,
       "y": 2,
       "w": 3,
       "h": 4,
-      "viewID": "31",
+      "viewID": "ba0bab707a11ed12",
       "links": {
-        "self": "/v2/dashboards/020f755c3c082000/cells/30",
-        "view": "/v2/views/31"
+        "self": "/api/v2/dashboards/020f755c3c082000/cells/da7aba5e5d81e550",
+        "view": "/api/v2/views/ba0bab707a11ed12"
       }
     }
   ],
   "links": {
-    "self": "/v2/dashboards/020f755c3c082000",
-    "cells": "/v2/dashboards/020f755c3c082000/cells"
+    "self": "/api/v2/dashboards/020f755c3c082000",
+    "log": "/api/v2/dashboards/020f755c3c082000/log",
+    "cells": "/api/v2/dashboards/020f755c3c082000/cells"
   }
 }
 `,
@@ -627,7 +686,8 @@ func TestService_handlePatchDashboard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			upd := platform.DashboardUpdate{}
@@ -643,7 +703,7 @@ func TestService_handlePatchDashboard(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://any.url", bytes.NewReader(b))
 
 			r = r.WithContext(context.WithValue(
-				context.TODO(),
+				context.Background(),
 				httprouter.ParamsKey,
 				httprouter.Params{
 					{
@@ -698,7 +758,7 @@ func TestService_handlePostDashboardCell(t *testing.T) {
 			fields: fields{
 				&mock.DashboardService{
 					AddDashboardCellF: func(ctx context.Context, id platform.ID, c *platform.Cell, opt platform.AddDashboardCellOptions) error {
-						c.ID = mustParseID("020f755c3c082000")
+						c.ID = platformtesting.MustIDBase16("020f755c3c082000")
 						return nil
 					},
 				},
@@ -706,9 +766,10 @@ func TestService_handlePostDashboardCell(t *testing.T) {
 			args: args{
 				id: "020f755c3c082000",
 				cell: &platform.Cell{
+					ID:     platformtesting.MustIDBase16("020f755c3c082000"),
 					X:      10,
 					Y:      11,
-					ViewID: platform.ID("0"),
+					ViewID: platformtesting.MustIDBase16("da7aba5e5d81e550"),
 				},
 			},
 			wants: wants{
@@ -721,10 +782,10 @@ func TestService_handlePostDashboardCell(t *testing.T) {
   "y": 11,
   "w": 0,
   "h": 0,
-  "viewID": "30",
+  "viewID": "da7aba5e5d81e550",
   "links": {
-    "self": "/v2/dashboards/020f755c3c082000/cells/020f755c3c082000",
-    "view": "/v2/views/30"
+    "self": "/api/v2/dashboards/020f755c3c082000/cells/020f755c3c082000",
+    "view": "/api/v2/views/da7aba5e5d81e550"
   }
 }
 `,
@@ -734,7 +795,8 @@ func TestService_handlePostDashboardCell(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			b, err := json.Marshal(tt.args.cell)
@@ -745,7 +807,7 @@ func TestService_handlePostDashboardCell(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://any.url", bytes.NewReader(b))
 
 			r = r.WithContext(context.WithValue(
-				context.TODO(),
+				context.Background(),
 				httprouter.ParamsKey,
 				httprouter.Params{
 					{
@@ -816,13 +878,14 @@ func TestService_handleDeleteDashboardCell(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			r := httptest.NewRequest("GET", "http://any.url", nil)
 
 			r = r.WithContext(context.WithValue(
-				context.TODO(),
+				context.Background(),
 				httprouter.ParamsKey,
 				httprouter.Params{
 					{
@@ -887,8 +950,8 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
 				&mock.DashboardService{
 					UpdateDashboardCellF: func(ctx context.Context, id, cellID platform.ID, upd platform.CellUpdate) (*platform.Cell, error) {
 						cell := &platform.Cell{
-							ID:     mustParseID("020f755c3c082000"),
-							ViewID: platform.ID("0"),
+							ID:     platformtesting.MustIDBase16("020f755c3c082000"),
+							ViewID: platformtesting.MustIDBase16("da7aba5e5d81e550"),
 						}
 
 						if err := upd.Apply(cell); err != nil {
@@ -902,6 +965,7 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
 			args: args{
 				id:     "020f755c3c082000",
 				cellID: "020f755c3c082000",
+				viewID: platformtesting.MustIDBase16("da7aba5e5d81e550"),
 				x:      10,
 				y:      11,
 			},
@@ -915,10 +979,10 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
   "y": 11,
   "w": 0,
   "h": 0,
-  "viewID": "30",
+  "viewID": "da7aba5e5d81e550",
   "links": {
-    "self": "/v2/dashboards/020f755c3c082000/cells/020f755c3c082000",
-    "view": "/v2/views/30"
+    "self": "/api/v2/dashboards/020f755c3c082000/cells/020f755c3c082000",
+    "view": "/api/v2/views/da7aba5e5d81e550"
   }
 }
 `,
@@ -928,7 +992,8 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewDashboardHandler()
+			mappingService := mock.NewUserResourceMappingService()
+			h := NewDashboardHandler(mappingService)
 			h.DashboardService = tt.fields.DashboardService
 
 			upd := platform.CellUpdate{}
@@ -944,8 +1009,8 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
 			if tt.args.h != 0 {
 				upd.H = &tt.args.h
 			}
-			if len(tt.args.viewID) != 0 {
-				upd.ViewID = &tt.args.viewID
+			if tt.args.viewID.Valid() {
+				upd.ViewID = tt.args.viewID
 			}
 
 			b, err := json.Marshal(upd)
@@ -956,7 +1021,7 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://any.url", bytes.NewReader(b))
 
 			r = r.WithContext(context.WithValue(
-				context.TODO(),
+				context.Background(),
 				httprouter.ParamsKey,
 				httprouter.Params{
 					{
@@ -988,4 +1053,56 @@ func TestService_handlePatchDashboardCell(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_dashboardCellIDPath(t *testing.T) {
+	t.Parallel()
+	dashboard, err := platform.IDFromString("deadbeefdeadbeef")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cell, err := platform.IDFromString("cade9a7ecade9a7e")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := "/api/v2/dashboards/deadbeefdeadbeef/cells/cade9a7ecade9a7e"
+	if got := dashboardCellIDPath(*dashboard, *cell); got != want {
+		t.Errorf("dashboardCellIDPath() = got: %s want: %s", got, want)
+	}
+}
+
+func initDashboardService(f platformtesting.DashboardFields, t *testing.T) (platform.DashboardService, func()) {
+	t.Helper()
+	svc := inmem.NewService()
+	svc.IDGenerator = f.IDGenerator
+	svc.WithTime(f.NowFn)
+	ctx := context.Background()
+	for _, d := range f.Dashboards {
+		if err := svc.PutDashboard(ctx, d); err != nil {
+			t.Fatalf("failed to populate dashboard")
+		}
+	}
+	for _, b := range f.Views {
+		if err := svc.PutView(ctx, b); err != nil {
+			t.Fatalf("failed to populate views")
+		}
+	}
+
+	mappingService := mock.NewUserResourceMappingService()
+	handler := NewDashboardHandler(mappingService)
+	handler.DashboardService = svc
+	server := httptest.NewServer(handler)
+	client := DashboardService{
+		Addr: server.URL,
+	}
+	done := server.Close
+
+	return &client, done
+}
+
+func TestDashboardService(t *testing.T) {
+	t.Parallel()
+	platformtesting.DashboardService(initDashboardService, t)
 }

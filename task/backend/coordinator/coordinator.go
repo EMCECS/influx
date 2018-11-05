@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/task/backend"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/task/backend"
+	"go.uber.org/zap"
 )
 
 type Coordinator struct {
 	backend.Store
 
-	sch backend.Scheduler
+	logger *zap.Logger
+	sch    backend.Scheduler
 
 	limit int
 }
@@ -24,32 +26,56 @@ func WithLimit(i int) Option {
 	}
 }
 
-func New(scheduler backend.Scheduler, st backend.Store, opts ...Option) backend.Store {
+func New(logger *zap.Logger, scheduler backend.Scheduler, st backend.Store, opts ...Option) *Coordinator {
 	c := &Coordinator{
-		sch:   scheduler,
-		Store: st,
-		limit: 1000,
+		logger: logger,
+		sch:    scheduler,
+		Store:  st,
+		limit:  1000,
 	}
 
 	for _, opt := range opts {
 		opt(c)
 	}
 
+	go c.claimExistingTasks()
+
 	return c
 }
 
-func (c *Coordinator) CreateTask(ctx context.Context, org, user platform.ID, script string, scheduleAfter int64) (platform.ID, error) {
-	id, err := c.Store.CreateTask(ctx, org, user, script, scheduleAfter)
+// claimExistingTasks is called on startup to claim all tasks in the store.
+func (c *Coordinator) claimExistingTasks() {
+	tasks, err := c.Store.ListTasks(context.Background(), backend.TaskSearchParams{})
+	if err != nil {
+		c.logger.Error("failed to list tasks", zap.Error(err))
+		return
+	}
+
+	for len(tasks) > 0 {
+		for _, task := range tasks {
+			t := task // Copy to avoid mistaken closure around task value.
+			if err := c.sch.ClaimTask(&t.Task, &t.Meta); err != nil {
+				c.logger.Error("failed claim task", zap.Error(err))
+				continue
+			}
+		}
+		tasks, err = c.Store.ListTasks(context.Background(), backend.TaskSearchParams{
+			After: tasks[len(tasks)-1].Task.ID,
+		})
+		if err != nil {
+			c.logger.Error("failed list additional tasks", zap.Error(err))
+			return
+		}
+	}
+}
+
+func (c *Coordinator) CreateTask(ctx context.Context, req backend.CreateTaskRequest) (platform.ID, error) {
+	id, err := c.Store.CreateTask(ctx, req)
 	if err != nil {
 		return id, err
 	}
 
-	task, err := c.Store.FindTaskByID(ctx, id)
-	if err != nil {
-		return id, err
-	}
-
-	meta, err := c.Store.FindTaskMetaByID(ctx, id)
+	task, meta, err := c.Store.FindTaskByIDWithMeta(ctx, id)
 	if err != nil {
 		return id, err
 	}
@@ -65,64 +91,40 @@ func (c *Coordinator) CreateTask(ctx context.Context, org, user platform.ID, scr
 	return id, nil
 }
 
-func (c *Coordinator) ModifyTask(ctx context.Context, id platform.ID, newScript string) error {
-	if err := c.Store.ModifyTask(ctx, id, newScript); err != nil {
-		return err
-	}
-
-	task, err := c.Store.FindTaskByID(ctx, id)
+func (c *Coordinator) UpdateTask(ctx context.Context, req backend.UpdateTaskRequest) (backend.UpdateTaskResult, error) {
+	res, err := c.Store.UpdateTask(ctx, req)
 	if err != nil {
-		return err
+		return res, err
 	}
 
-	meta, err := c.Store.FindTaskMetaByID(ctx, id)
+	task, meta, err := c.Store.FindTaskByIDWithMeta(ctx, req.ID)
 	if err != nil {
-		return err
+		return res, err
 	}
 
-	if err := c.sch.ReleaseTask(id); err != nil {
-		return err
+	// If disabling the task, do so before modifying the script.
+	if req.Status == backend.TaskInactive && res.OldStatus != backend.TaskInactive {
+		if err := c.sch.ReleaseTask(req.ID); err != nil && err != backend.ErrTaskNotClaimed {
+			return res, err
+		}
 	}
 
-	if err := c.sch.ClaimTask(task, meta); err != nil {
-		return err
+	if err := c.sch.UpdateTask(task, meta); err != nil && err != backend.ErrTaskNotClaimed {
+		return res, err
 	}
 
-	return nil
-}
-
-func (c *Coordinator) EnableTask(ctx context.Context, id platform.ID) error {
-	if err := c.Store.EnableTask(ctx, id); err != nil {
-		return err
+	// If enabling the task, claim it after modifying the script.
+	if req.Status == backend.TaskActive {
+		if err := c.sch.ClaimTask(task, meta); err != nil && err != backend.ErrTaskAlreadyClaimed {
+			return res, err
+		}
 	}
 
-	task, err := c.Store.FindTaskByID(ctx, id)
-	if err != nil {
-		return err
-	}
-
-	meta, err := c.Store.FindTaskMetaByID(ctx, id)
-	if err != nil {
-		return err
-	}
-
-	if err := c.sch.ClaimTask(task, meta); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Coordinator) DisableTask(ctx context.Context, id platform.ID) error {
-	if err := c.Store.DisableTask(ctx, id); err != nil {
-		return err
-	}
-
-	return c.sch.ReleaseTask(id)
+	return res, nil
 }
 
 func (c *Coordinator) DeleteTask(ctx context.Context, id platform.ID) (deleted bool, err error) {
-	if err := c.sch.ReleaseTask(id); err != nil {
+	if err := c.sch.ReleaseTask(id); err != nil && err != backend.ErrTaskNotClaimed {
 		return false, err
 	}
 
@@ -138,7 +140,7 @@ func (c *Coordinator) DeleteOrg(ctx context.Context, orgID platform.ID) error {
 	}
 
 	for _, orgTask := range orgTasks {
-		if err := c.sch.ReleaseTask(orgTask.ID); err != nil {
+		if err := c.sch.ReleaseTask(orgTask.Task.ID); err != nil {
 			return err
 		}
 	}
@@ -155,10 +157,14 @@ func (c *Coordinator) DeleteUser(ctx context.Context, userID platform.ID) error 
 	}
 
 	for _, userTask := range userTasks {
-		if err := c.sch.ReleaseTask(userTask.ID); err != nil {
+		if err := c.sch.ReleaseTask(userTask.Task.ID); err != nil {
 			return err
 		}
 	}
 
 	return c.Store.DeleteUser(ctx, userID)
+}
+
+func (c *Coordinator) CancelRun(ctx context.Context, taskID, runID platform.ID) error {
+	return c.sch.CancelRun(ctx, taskID, runID)
 }

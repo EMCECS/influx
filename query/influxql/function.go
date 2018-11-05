@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/execute"
+	"github.com/influxdata/flux/functions/transformations"
 	"github.com/influxdata/influxql"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
 )
 
 // function contains the prototype for invoking a function.
@@ -102,7 +102,7 @@ func parseFunction(expr *influxql.Call) (*function, error) {
 
 // createFunctionCursor creates a new cursor that calls a function on one of the columns
 // and returns the result.
-func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (cursor, error) {
+func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor, normalize bool) (cursor, error) {
 	cur := &functionCursor{
 		call:   call,
 		parent: in,
@@ -113,11 +113,9 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("count", &functions.CountOpSpec{
+		cur.id = t.op("count", &transformations.CountOpSpec{
 			AggregateConfig: execute.AggregateConfig{
 				Columns: []string{value},
-				TimeSrc: execute.DefaultStartColLabel,
-				TimeDst: execute.DefaultTimeColLabel,
 			},
 		}, in.ID())
 		cur.value = value
@@ -127,7 +125,7 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("min", &functions.MinOpSpec{
+		cur.id = t.op("min", &transformations.MinOpSpec{
 			SelectorConfig: execute.SelectorConfig{
 				Column: value,
 			},
@@ -139,7 +137,7 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("max", &functions.MaxOpSpec{
+		cur.id = t.op("max", &transformations.MaxOpSpec{
 			SelectorConfig: execute.SelectorConfig{
 				Column: value,
 			},
@@ -151,11 +149,9 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("sum", &functions.SumOpSpec{
+		cur.id = t.op("sum", &transformations.SumOpSpec{
 			AggregateConfig: execute.AggregateConfig{
 				Columns: []string{value},
-				TimeSrc: execute.DefaultStartColLabel,
-				TimeDst: execute.DefaultTimeColLabel,
 			},
 		}, in.ID())
 		cur.value = value
@@ -165,7 +161,7 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("first", &functions.FirstOpSpec{
+		cur.id = t.op("first", &transformations.FirstOpSpec{
 			SelectorConfig: execute.SelectorConfig{
 				Column: value,
 			},
@@ -177,7 +173,7 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("last", &functions.LastOpSpec{
+		cur.id = t.op("last", &transformations.LastOpSpec{
 			SelectorConfig: execute.SelectorConfig{
 				Column: value,
 			},
@@ -189,11 +185,9 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 		if !ok {
 			return nil, fmt.Errorf("undefined variable: %s", call.Args[0])
 		}
-		cur.id = t.op("mean", &functions.MeanOpSpec{
+		cur.id = t.op("mean", &transformations.MeanOpSpec{
 			AggregateConfig: execute.AggregateConfig{
 				Columns: []string{value},
-				TimeSrc: execute.DefaultStartColLabel,
-				TimeDst: execute.DefaultTimeColLabel,
 			},
 		}, in.ID())
 		cur.value = value
@@ -222,14 +216,12 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 			return nil, errors.New("argument N must be between 0 and 100")
 		}
 
-		cur.id = t.op("percentile", &functions.PercentileOpSpec{
+		cur.id = t.op("percentile", &transformations.PercentileOpSpec{
 			Percentile:  percentile,
 			Compression: 0,
 			Method:      "exact_selector",
 			AggregateConfig: execute.AggregateConfig{
 				Columns: []string{fieldName},
-				TimeSrc: execute.DefaultStartColLabel,
-				TimeDst: execute.DefaultTimeColLabel,
 			},
 		}, in.ID())
 		cur.value = fieldName
@@ -237,18 +229,31 @@ func createFunctionCursor(t *transpilerState, call *influxql.Call, in cursor) (c
 	default:
 		return nil, fmt.Errorf("unimplemented function: %q", call.Name)
 	}
+
+	// If we have been told to normalize the time, we do it here.
+	if normalize {
+		if influxql.IsSelector(call) {
+			cur.id = t.op("drop", &transformations.DropOpSpec{
+				Cols: []string{execute.DefaultTimeColLabel},
+			}, cur.id)
+		}
+		cur.id = t.op("duplicate", &transformations.DuplicateOpSpec{
+			Col: execute.DefaultStartColLabel,
+			As:  execute.DefaultTimeColLabel,
+		}, cur.id)
+	}
 	return cur, nil
 }
 
 type functionCursor struct {
-	id      query.OperationID
+	id      flux.OperationID
 	call    *influxql.Call
 	value   string
 	exclude map[influxql.Expr]struct{}
 	parent  cursor
 }
 
-func (c *functionCursor) ID() query.OperationID {
+func (c *functionCursor) ID() flux.OperationID {
 	return c.id
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 // ErrViewNotFound is the error for a missing View.
-const ErrViewNotFound = Error("View not found")
+const ErrViewNotFound = ChronografError("View not found")
 
 // ViewService represents a service for managing View data.
 type ViewService interface {
@@ -61,20 +61,23 @@ type View struct {
 	Properties ViewProperties
 }
 
+// ViewContents is the id and name of a specific view.
 type ViewContents struct {
-	ID   ID     `json:"id"`
+	ID   ID     `json:"id,omitempty"`
 	Name string `json:"name"`
 }
 
+// ViewProperties is used to mark other structures as conforming to a View.
 type ViewProperties interface {
-	ViewProperties()
+	viewProperties()
 }
 
 // EmptyViewProperties is visualization that has no values
 type EmptyViewProperties struct{}
 
-func (v EmptyViewProperties) ViewProperties() {}
+func (v EmptyViewProperties) viewProperties() {}
 
+// UnmarshalViewPropertiesJSON unmarshals JSON bytes into a ViewProperties.
 func UnmarshalViewPropertiesJSON(b []byte) (ViewProperties, error) {
 	var v struct {
 		B json.RawMessage `json:"properties"`
@@ -91,6 +94,7 @@ func UnmarshalViewPropertiesJSON(b []byte) (ViewProperties, error) {
 
 	var t struct {
 		Shape string `json:"shape"`
+		Type  string `json:"type"`
 	}
 
 	if err := json.Unmarshal(v.B, &t); err != nil {
@@ -99,12 +103,57 @@ func UnmarshalViewPropertiesJSON(b []byte) (ViewProperties, error) {
 
 	var vis ViewProperties
 	switch t.Shape {
-	case "chronograf-v1":
-		var qv V1ViewProperties
-		if err := json.Unmarshal(v.B, &qv); err != nil {
-			return nil, err
+	case "chronograf-v2":
+		switch t.Type {
+		case "line":
+			var lv LineViewProperties
+			if err := json.Unmarshal(v.B, &lv); err != nil {
+				return nil, err
+			}
+			vis = lv
+		case "single-stat":
+			var ssv SingleStatViewProperties
+			if err := json.Unmarshal(v.B, &ssv); err != nil {
+				return nil, err
+			}
+			vis = ssv
+		case "gauge":
+			var gv GaugeViewProperties
+			if err := json.Unmarshal(v.B, &gv); err != nil {
+				return nil, err
+			}
+			vis = gv
+		case "step-plot":
+			var spv StepPlotViewProperties
+			if err := json.Unmarshal(v.B, &spv); err != nil {
+				return nil, err
+			}
+			vis = spv
+		case "stacked":
+			var sv StackedViewProperties
+			if err := json.Unmarshal(v.B, &sv); err != nil {
+				return nil, err
+			}
+			vis = sv
+		case "table":
+			var tv TableViewProperties
+			if err := json.Unmarshal(v.B, &tv); err != nil {
+				return nil, err
+			}
+			vis = tv
+		case "log-viewer": // happens in log viewer stays in log viewer.
+			var lv LogViewProperties
+			if err := json.Unmarshal(v.B, &lv); err != nil {
+				return nil, err
+			}
+			vis = lv
+		case "line-plus-single-stat":
+			var lv LinePlusSingleStatProperties
+			if err := json.Unmarshal(v.B, &lv); err != nil {
+				return nil, err
+			}
+			vis = lv
 		}
-		vis = qv
 	case "empty":
 		var ev EmptyViewProperties
 		if err := json.Unmarshal(v.B, &ev); err != nil {
@@ -118,16 +167,73 @@ func UnmarshalViewPropertiesJSON(b []byte) (ViewProperties, error) {
 	return vis, nil
 }
 
+// MarshalViewPropertiesJSON encodes a view into JSON bytes.
 func MarshalViewPropertiesJSON(v ViewProperties) ([]byte, error) {
 	var s interface{}
 	switch vis := v.(type) {
-	case V1ViewProperties:
+	case SingleStatViewProperties:
 		s = struct {
 			Shape string `json:"shape"`
-			V1ViewProperties
+			SingleStatViewProperties
 		}{
-			Shape:            "chronograf-v1",
-			V1ViewProperties: vis,
+			Shape:                    "chronograf-v2",
+			SingleStatViewProperties: vis,
+		}
+	case TableViewProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			TableViewProperties
+		}{
+			Shape:               "chronograf-v2",
+			TableViewProperties: vis,
+		}
+	case GaugeViewProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			GaugeViewProperties
+		}{
+			Shape:               "chronograf-v2",
+			GaugeViewProperties: vis,
+		}
+	case LineViewProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			LineViewProperties
+		}{
+			Shape:              "chronograf-v2",
+			LineViewProperties: vis,
+		}
+	case LinePlusSingleStatProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			LinePlusSingleStatProperties
+		}{
+			Shape:                        "chronograf-v2",
+			LinePlusSingleStatProperties: vis,
+		}
+	case StepPlotViewProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			StepPlotViewProperties
+		}{
+			Shape:                  "chronograf-v2",
+			StepPlotViewProperties: vis,
+		}
+	case StackedViewProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			StackedViewProperties
+		}{
+			Shape:                 "chronograf-v2",
+			StackedViewProperties: vis,
+		}
+	case LogViewProperties:
+		s = struct {
+			Shape string `json:"shape"`
+			LogViewProperties
+		}{
+			Shape:             "chronograf-v2",
+			LogViewProperties: vis,
 		}
 	default:
 		s = struct {
@@ -141,6 +247,7 @@ func MarshalViewPropertiesJSON(v ViewProperties) ([]byte, error) {
 	return json.Marshal(s)
 }
 
+// MarshalJSON encodes a view to JSON bytes.
 func (c View) MarshalJSON() ([]byte, error) {
 	vis, err := MarshalViewPropertiesJSON(c.Properties)
 	if err != nil {
@@ -156,6 +263,7 @@ func (c View) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// UnmarshalJSON decodes JSON bytes into the corresponding view type (those that implement ViewProperties).
 func (c *View) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &c.ViewContents); err != nil {
 		return err
@@ -169,6 +277,7 @@ func (c *View) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// UnmarshalJSON decodes JSON bytes into the corresponding view update type (those that implement ViewProperties).
 func (u *ViewUpdate) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &u.ViewContentsUpdate); err != nil {
 		return err
@@ -181,6 +290,8 @@ func (u *ViewUpdate) UnmarshalJSON(b []byte) error {
 	u.Properties = v
 	return nil
 }
+
+// MarshalJSON encodes a view to JSON bytes.
 func (u ViewUpdate) MarshalJSON() ([]byte, error) {
 	vis, err := MarshalViewPropertiesJSON(u.Properties)
 	if err != nil {
@@ -196,19 +307,104 @@ func (u ViewUpdate) MarshalJSON() ([]byte, error) {
 	})
 }
 
-type V1ViewProperties struct {
+// LinePlusSingleStatProperties represents options for line plus single stat view in Chronograf
+type LinePlusSingleStatProperties struct {
 	Queries       []DashboardQuery `json:"queries"`
 	Axes          map[string]Axis  `json:"axes"`
 	Type          string           `json:"type"`
-	ViewColors    []ViewColor      `json:"colors"`
 	Legend        Legend           `json:"legend"`
-	TableOptions  TableOptions     `json:"tableOptions,omitempty"`
+	ViewColors    []ViewColor      `json:"colors"`
+	Prefix        string           `json:"prefix"`
+	Suffix        string           `json:"suffix"`
+	DecimalPlaces DecimalPlaces    `json:"decimalPlaces"`
+}
+
+// LineViewProperties represents options for line view in Chronograf
+type LineViewProperties struct {
+	Queries    []DashboardQuery `json:"queries"`
+	Axes       map[string]Axis  `json:"axes"`
+	Type       string           `json:"type"`
+	Legend     Legend           `json:"legend"`
+	ViewColors []ViewColor      `json:"colors"`
+}
+
+// StepPlotViewProperties represents options for step plot view in Chronograf
+type StepPlotViewProperties struct {
+	Queries    []DashboardQuery `json:"queries"`
+	Axes       map[string]Axis  `json:"axes"`
+	Type       string           `json:"type"`
+	Legend     Legend           `json:"legend"`
+	ViewColors []ViewColor      `json:"colors"`
+}
+
+// StackedViewProperties represents options for stacked view in Chronograf
+type StackedViewProperties struct {
+	Queries    []DashboardQuery `json:"queries"`
+	Axes       map[string]Axis  `json:"axes"`
+	Type       string           `json:"type"`
+	Legend     Legend           `json:"legend"`
+	ViewColors []ViewColor      `json:"colors"`
+}
+
+// SingleStatViewProperties represents options for single stat view in Chronograf
+type SingleStatViewProperties struct {
+	Type          string           `json:"type"`
+	Queries       []DashboardQuery `json:"queries"`
+	Prefix        string           `json:"prefix"`
+	Suffix        string           `json:"suffix"`
+	ViewColors    []ViewColor      `json:"colors"`
+	DecimalPlaces DecimalPlaces    `json:"decimalPlaces"`
+}
+
+// GaugeViewProperties represents options for gauge view in Chronograf
+type GaugeViewProperties struct {
+	Type          string           `json:"type"`
+	Queries       []DashboardQuery `json:"queries"`
+	Prefix        string           `json:"prefix"`
+	Suffix        string           `json:"suffix"`
+	ViewColors    []ViewColor      `json:"colors"`
+	DecimalPlaces DecimalPlaces    `json:"decimalPlaces"`
+}
+
+// TableViewProperties represents options for table view in Chronograf
+type TableViewProperties struct {
+	Type          string           `json:"type"`
+	Queries       []DashboardQuery `json:"queries"`
+	ViewColors    []ViewColor      `json:"colors"`
+	TableOptions  TableOptions     `json:"tableOptions"`
 	FieldOptions  []RenamableField `json:"fieldOptions"`
 	TimeFormat    string           `json:"timeFormat"`
 	DecimalPlaces DecimalPlaces    `json:"decimalPlaces"`
 }
 
-func (V1ViewProperties) ViewProperties() {}
+// LogViewProperties represents options for log viewer in Chronograf.
+type LogViewProperties struct {
+	Type    string            `json:"type"`
+	Columns []LogViewerColumn `json:"columns"`
+}
+
+// LogViewerColumn represents a specific column in a Log Viewer.
+type LogViewerColumn struct {
+	Name     string             `json:"name"`
+	Position int32              `json:"position"`
+	Settings []LogColumnSetting `json:"settings"`
+}
+
+// LogColumnSetting represent the settings for a specific column of a Log Viewer.
+type LogColumnSetting struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+	Name  string `json:"name,omitempty"`
+}
+
+func (LineViewProperties) viewProperties()           {}
+func (LinePlusSingleStatProperties) viewProperties() {}
+func (StepPlotViewProperties) viewProperties()       {}
+func (SingleStatViewProperties) viewProperties()     {}
+func (StackedViewProperties) viewProperties()        {}
+func (GaugeViewProperties) viewProperties()          {}
+func (TableViewProperties) viewProperties()          {}
+func (LogViewProperties) viewProperties()            {}
 
 /////////////////////////////
 // Old Chronograf Types
@@ -216,36 +412,19 @@ func (V1ViewProperties) ViewProperties() {}
 
 // DashboardQuery includes state for the query builder.  This is a transition
 // struct while we move to the full InfluxQL AST
+// TODO(desa): this should be platform.ID
 type DashboardQuery struct {
-	Command     string      `json:"query"`                 // Command is the query itself
-	Label       string      `json:"label,omitempty"`       // Label is the Y-Axis label for the data
-	Range       *Range      `json:"range,omitempty"`       // Range is the default Y-Axis range for the data
-	QueryConfig QueryConfig `json:"queryConfig,omitempty"` // QueryConfig represents the query state that is understood by the data explorer
-	// TODO(desa): this should be platform.ID
-	Source string      `json:"source"` // Source is the optional URI to the data source for this queryConfig
-	Shifts []TimeShift `json:"-"`      // Shifts represents shifts to apply to an influxql query's time range.  Clients expect the shift to be in the generated QueryConfig
+	Label  string `json:"label,omitempty"` // Label is the Y-Axis label for the data
+	Range  *Range `json:"range,omitempty"` // Range is the default Y-Axis range for the data
+	Text   string `json:"text"`
+	Type   string `json:"type"`
+	Source string `json:"source"` // Source is the optional URI to the data source for this queryConfig
 }
 
 // Range represents an upper and lower bound for data
 type Range struct {
 	Upper int64 `json:"upper"` // Upper is the upper bound
 	Lower int64 `json:"lower"` // Lower is the lower bound
-}
-
-// QueryConfig represents UI query from the data explorer
-type QueryConfig struct {
-	ID              string              `json:"id,omitempty"`
-	Database        string              `json:"database"`
-	Measurement     string              `json:"measurement"`
-	RetentionPolicy string              `json:"retentionPolicy"`
-	Fields          []Field             `json:"fields"`
-	Tags            map[string][]string `json:"tags"`
-	GroupBy         GroupBy             `json:"groupBy"`
-	AreTagsAccepted bool                `json:"areTagsAccepted"`
-	Fill            string              `json:"fill,omitempty"`
-	RawText         *string             `json:"rawText"`
-	Range           *DurationRange      `json:"range"`
-	Shifts          []TimeShift         `json:"shifts"`
 }
 
 // TimeShift represents a shift to apply to an influxql query's time range

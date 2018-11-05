@@ -1,27 +1,34 @@
 package bolt
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/coreos/bbolt"
-	"github.com/EMCECS/influx"
+	"github.com/influxdata/platform"
+	platformcontext "github.com/influxdata/platform/context"
 )
 
 var (
-	userBucket = []byte("usersv1")
-	userIndex  = []byte("userindexv1")
+	userUser           = []byte("usersv1")
+	userIndex          = []byte("userindexv1")
+	userpasswordBucket = []byte("userspasswordv1")
 )
 
 var _ platform.UserService = (*Client)(nil)
+var _ platform.UserOperationLogService = (*Client)(nil)
+var _ platform.BasicAuthService = (*Client)(nil)
 
 func (c *Client) initializeUsers(ctx context.Context, tx *bolt.Tx) error {
-	if _, err := tx.CreateBucketIfNotExists([]byte(userBucket)); err != nil {
+	if _, err := tx.CreateBucketIfNotExists([]byte(userUser)); err != nil {
 		return err
 	}
 	if _, err := tx.CreateBucketIfNotExists([]byte(userIndex)); err != nil {
+		return err
+	}
+	if _, err := tx.CreateBucketIfNotExists([]byte(userpasswordBucket)); err != nil {
 		return err
 	}
 	return nil
@@ -48,9 +55,13 @@ func (c *Client) FindUserByID(ctx context.Context, id platform.ID) (*platform.Us
 }
 
 func (c *Client) findUserByID(ctx context.Context, tx *bolt.Tx, id platform.ID) (*platform.User, error) {
-	var u platform.User
+	encodedID, err := id.Encode()
+	if err != nil {
+		return nil, err
+	}
 
-	v := tx.Bucket(userBucket).Get(id)
+	var u platform.User
+	v := tx.Bucket(userUser).Get(encodedID)
 
 	if len(v) == 0 {
 		// TODO: Make standard error
@@ -81,8 +92,17 @@ func (c *Client) FindUserByName(ctx context.Context, n string) (*platform.User, 
 }
 
 func (c *Client) findUserByName(ctx context.Context, tx *bolt.Tx, n string) (*platform.User, error) {
-	id := tx.Bucket(userIndex).Get(userIndexKey(n))
-	return c.findUserByID(ctx, tx, platform.ID(id))
+	u := tx.Bucket(userIndex).Get(userIndexKey(n))
+	if u == nil {
+		// TODO: Make standard error
+		return nil, fmt.Errorf("user not found")
+	}
+
+	var id platform.ID
+	if err := id.Decode(u); err != nil {
+		return nil, err
+	}
+	return c.findUserByID(ctx, tx, id)
 }
 
 // FindUser retrives a user using an arbitrary user filter.
@@ -124,7 +144,7 @@ func (c *Client) FindUser(ctx context.Context, filter platform.UserFilter) (*pla
 func filterUsersFn(filter platform.UserFilter) func(u *platform.User) bool {
 	if filter.ID != nil {
 		return func(u *platform.User) bool {
-			return bytes.Equal(u.ID, *filter.ID)
+			return u.ID.Valid() && u.ID == *filter.ID
 		}
 	}
 
@@ -189,6 +209,10 @@ func (c *Client) CreateUser(ctx context.Context, u *platform.User) error {
 
 		u.ID = c.IDGenerator.ID()
 
+		if err := c.appendUserEventToLog(ctx, tx, u.ID, userCreatedEvent); err != nil {
+			return err
+		}
+
 		return c.putUser(ctx, tx, u)
 	})
 }
@@ -205,11 +229,14 @@ func (c *Client) putUser(ctx context.Context, tx *bolt.Tx, u *platform.User) err
 	if err != nil {
 		return err
 	}
-
-	if err := tx.Bucket(userIndex).Put(userIndexKey(u.Name), u.ID); err != nil {
+	encodedID, err := u.ID.Encode()
+	if err != nil {
 		return err
 	}
-	return tx.Bucket(userBucket).Put(u.ID, v)
+	if err := tx.Bucket(userIndex).Put(userIndexKey(u.Name), encodedID); err != nil {
+		return err
+	}
+	return tx.Bucket(userUser).Put(encodedID, v)
 }
 
 func userIndexKey(n string) []byte {
@@ -218,7 +245,7 @@ func userIndexKey(n string) []byte {
 
 // forEachUser will iterate through all users while fn returns true.
 func forEachUser(ctx context.Context, tx *bolt.Tx, fn func(*platform.User) bool) error {
-	cur := tx.Bucket(userBucket).Cursor()
+	cur := tx.Bucket(userUser).Cursor()
 	for k, v := cur.First(); k != nil; k, v = cur.Next() {
 		u := &platform.User{}
 		if err := json.Unmarshal(v, u); err != nil {
@@ -267,6 +294,10 @@ func (c *Client) updateUser(ctx context.Context, tx *bolt.Tx, id platform.ID, up
 		u.Name = *upd.Name
 	}
 
+	if err := c.appendUserEventToLog(ctx, tx, u.ID, userUpdatedEvent); err != nil {
+		return nil, err
+	}
+
 	if err := c.putUser(ctx, tx, u); err != nil {
 		return nil, err
 	}
@@ -289,11 +320,19 @@ func (c *Client) deleteUser(ctx context.Context, tx *bolt.Tx, id platform.ID) er
 	if err != nil {
 		return err
 	}
-
+	encodedID, err := id.Encode()
+	if err != nil {
+		return err
+	}
 	if err := tx.Bucket(userIndex).Delete(userIndexKey(u.Name)); err != nil {
 		return err
 	}
-	return tx.Bucket(userBucket).Delete(id)
+	if err := tx.Bucket(userUser).Delete(encodedID); err != nil {
+		return err
+	}
+	return c.deleteUserResourceMappings(ctx, tx, platform.UserResourceMappingFilter{
+		UserID: id,
+	})
 }
 
 func (c *Client) deleteUsersAuthorizations(ctx context.Context, tx *bolt.Tx, id platform.ID) error {
@@ -310,4 +349,75 @@ func (c *Client) deleteUsersAuthorizations(ctx context.Context, tx *bolt.Tx, id 
 		}
 	}
 	return nil
+}
+
+// GeUserOperationLog retrieves a user operation log.
+func (c *Client) GetUserOperationLog(ctx context.Context, id platform.ID, opts platform.FindOptions) ([]*platform.OperationLogEntry, int, error) {
+	// TODO(desa): might be worthwhile to allocate a slice of size opts.Limit
+	log := []*platform.OperationLogEntry{}
+
+	err := c.db.View(func(tx *bolt.Tx) error {
+		key, err := encodeBucketOperationLogKey(id)
+		if err != nil {
+			return err
+		}
+
+		return c.forEachLogEntry(ctx, tx, key, opts, func(v []byte, t time.Time) error {
+			e := &platform.OperationLogEntry{}
+			if err := json.Unmarshal(v, e); err != nil {
+				return err
+			}
+			e.Time = t
+
+			log = append(log, e)
+
+			return nil
+		})
+	})
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return log, len(log), nil
+}
+
+// TODO(desa): what do we want these to be?
+const (
+	userCreatedEvent = "User Created"
+	userUpdatedEvent = "User Updated"
+)
+
+func encodeUserOperationLogKey(id platform.ID) ([]byte, error) {
+	buf, err := id.Encode()
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(bucketOperationLogKeyPrefix), buf...), nil
+}
+
+func (c *Client) appendUserEventToLog(ctx context.Context, tx *bolt.Tx, id platform.ID, s string) error {
+	e := &platform.OperationLogEntry{
+		Description: s,
+	}
+	// TODO(desa): this is fragile and non explicit since it requires an authorizer to be on context. It should be
+	//             replaced with a higher level transaction so that adding to the log can take place in the http handler
+	//             where the userID will exist explicitly.
+	a, err := platformcontext.GetAuthorizer(ctx)
+	if err == nil {
+		// Add the user to the log if you can, but don't error if its not there.
+		e.UserID = a.GetUserID()
+	}
+
+	v, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+
+	k, err := encodeUserOperationLogKey(id)
+	if err != nil {
+		return err
+	}
+
+	return c.addLogEntry(ctx, tx, k, v, c.time())
 }

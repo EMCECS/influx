@@ -5,31 +5,31 @@ package spectests
 import (
 	"time"
 
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/ast"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/influxql"
-	"github.com/EMCECS/influx/query/semantic"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/ast"
+	"github.com/influxdata/flux/execute"
+
+	"github.com/influxdata/flux/semantic"
+	"github.com/influxdata/platform/query/influxql"
 )
 
 func init() {
 	RegisterFixture(
 		NewFixture(
 			`SELECT a + b FROM db0..cpu`,
-			&query.Spec{
-				Operations: []*query.Operation{
+			&flux.Spec{
+				Operations: []*flux.Operation{
 					{
 						ID: "from0",
-						Spec: &functions.FromOpSpec{
-							BucketID: bucketID,
+						Spec: &inputs.FromOpSpec{
+							BucketID: bucketID.String(),
 						},
 					},
 					{
 						ID: "range0",
-						Spec: &functions.RangeOpSpec{
-							Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-							Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+						Spec: &transformations.RangeOpSpec{
+							Start:    flux.Time{Absolute: time.Unix(0, influxql.MinTime)},
+							Stop:     flux.Time{Absolute: time.Unix(0, influxql.MaxTime)},
 							TimeCol:  execute.DefaultTimeColLabel,
 							StartCol: execute.DefaultStartColLabel,
 							StopCol:  execute.DefaultStopColLabel,
@@ -37,7 +37,7 @@ func init() {
 					},
 					{
 						ID: "filter0",
-						Spec: &functions.FilterOpSpec{
+						Spec: &transformations.FilterOpSpec{
 							Fn: &semantic.FunctionExpression{
 								Params: []*semantic.FunctionParam{
 									{Key: &semantic.Identifier{Name: "r"}},
@@ -74,15 +74,15 @@ func init() {
 					},
 					{
 						ID: "from1",
-						Spec: &functions.FromOpSpec{
-							BucketID: bucketID,
+						Spec: &inputs.FromOpSpec{
+							BucketID: bucketID.String(),
 						},
 					},
 					{
 						ID: "range1",
-						Spec: &functions.RangeOpSpec{
-							Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-							Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+						Spec: &transformations.RangeOpSpec{
+							Start:    flux.Time{Absolute: time.Unix(0, influxql.MinTime)},
+							Stop:     flux.Time{Absolute: time.Unix(0, influxql.MaxTime)},
 							TimeCol:  execute.DefaultTimeColLabel,
 							StartCol: execute.DefaultStartColLabel,
 							StopCol:  execute.DefaultStopColLabel,
@@ -90,7 +90,7 @@ func init() {
 					},
 					{
 						ID: "filter1",
-						Spec: &functions.FilterOpSpec{
+						Spec: &transformations.FilterOpSpec{
 							Fn: &semantic.FunctionExpression{
 								Params: []*semantic.FunctionParam{
 									{Key: &semantic.Identifier{Name: "r"}},
@@ -127,9 +127,9 @@ func init() {
 					},
 					{
 						ID: "join0",
-						Spec: &functions.JoinOpSpec{
+						Spec: &transformations.JoinOpSpec{
 							On: []string{"_measurement"},
-							TableNames: map[query.OperationID]string{
+							TableNames: map[flux.OperationID]string{
 								"filter0": "t0",
 								"filter1": "t1",
 							},
@@ -137,13 +137,13 @@ func init() {
 					},
 					{
 						ID: "group0",
-						Spec: &functions.GroupOpSpec{
+						Spec: &transformations.GroupOpSpec{
 							By: []string{"_measurement", "_start"},
 						},
 					},
 					{
 						ID: "map0",
-						Spec: &functions.MapOpSpec{
+						Spec: &transformations.MapOpSpec{
 							Fn: &semantic.FunctionExpression{
 								Params: []*semantic.FunctionParam{{
 									Key: &semantic.Identifier{Name: "r"},
@@ -185,12 +185,12 @@ func init() {
 					},
 					{
 						ID: "yield0",
-						Spec: &functions.YieldOpSpec{
+						Spec: &transformations.YieldOpSpec{
 							Name: "0",
 						},
 					},
 				},
-				Edges: []query.Edge{
+				Edges: []flux.Edge{
 					{Parent: "from0", Child: "range0"},
 					{Parent: "range0", Child: "filter0"},
 					{Parent: "from1", Child: "range1"},

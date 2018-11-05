@@ -7,9 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/influxdb/logger"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/task/backend"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/lang"
+	"github.com/influxdata/platform/logger"
+	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/task/backend"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +60,8 @@ var _ backend.RunPromise = (*syncRunPromise)(nil)
 
 func newSyncRunPromise(ctx context.Context, qr backend.QueuedRun, e *queryServiceExecutor, t *backend.StoreTask) *syncRunPromise {
 	ctx, cancel := context.WithCancel(ctx)
-	log, logEnd := logger.NewOperation(e.logger, "Executing task", "execute")
+	opLogger := e.logger.With(zap.Stringer("task_id", qr.TaskID), zap.Stringer("run_id", qr.RunID))
+	log, logEnd := logger.NewOperation(opLogger, "Executing task", "execute")
 	rp := &syncRunPromise{
 		qr:     qr,
 		svc:    e.svc,
@@ -117,7 +120,7 @@ func (p *syncRunPromise) finish(res *runResult, err error) {
 }
 
 func (p *syncRunPromise) doQuery() {
-	spec, err := query.Compile(p.ctx, p.t.Script, time.Unix(p.qr.Now, 0))
+	spec, err := flux.Compile(p.ctx, p.t.Script, time.Unix(p.qr.Now, 0))
 	if err != nil {
 		p.finish(nil, err)
 		return
@@ -125,7 +128,7 @@ func (p *syncRunPromise) doQuery() {
 
 	req := &query.Request{
 		OrganizationID: p.t.Org,
-		Compiler: query.SpecCompiler{
+		Compiler: lang.SpecCompiler{
 			Spec: spec,
 		},
 	}
@@ -177,14 +180,14 @@ func (e *asyncQueryServiceExecutor) Execute(ctx context.Context, run backend.Que
 		return nil, err
 	}
 
-	spec, err := query.Compile(ctx, t.Script, time.Unix(run.Now, 0))
+	spec, err := flux.Compile(ctx, t.Script, time.Unix(run.Now, 0))
 	if err != nil {
 		return nil, err
 	}
 
 	req := &query.Request{
 		OrganizationID: t.Org,
-		Compiler: query.SpecCompiler{
+		Compiler: lang.SpecCompiler{
 			Spec: spec,
 		},
 	}
@@ -199,7 +202,7 @@ func (e *asyncQueryServiceExecutor) Execute(ctx context.Context, run backend.Que
 // asyncRunPromise implements backend.RunPromise for an AsyncQueryService.
 type asyncRunPromise struct {
 	qr backend.QueuedRun
-	q  query.Query
+	q  flux.Query
 
 	logger *zap.Logger
 	logEnd func()
@@ -212,8 +215,9 @@ type asyncRunPromise struct {
 
 var _ backend.RunPromise = (*asyncRunPromise)(nil)
 
-func newAsyncRunPromise(qr backend.QueuedRun, q query.Query, e *asyncQueryServiceExecutor) *asyncRunPromise {
-	log, logEnd := logger.NewOperation(e.logger, "Executing task", "execute")
+func newAsyncRunPromise(qr backend.QueuedRun, q flux.Query, e *asyncQueryServiceExecutor) *asyncRunPromise {
+	opLogger := e.logger.With(zap.Stringer("task_id", qr.TaskID), zap.Stringer("run_id", qr.RunID))
+	log, logEnd := logger.NewOperation(opLogger, "Executing task", "execute")
 
 	p := &asyncRunPromise{
 		qr:    qr,
@@ -256,11 +260,11 @@ func (p *asyncRunPromise) followQuery() {
 	select {
 	case <-p.ready:
 		// The promise was finished somewhere else, so we don't need to call p.finish.
-		// But we do need to cancel the query. This could be a no-op.
+		// But we do need to cancel the flux. This could be a no-op.
 		p.q.Cancel()
 	case _, ok := <-p.q.Ready():
 		if !ok {
-			// Something went wrong with the query. Set the error in the run result.
+			// Something went wrong with the flux. Set the error in the run result.
 			rr := &runResult{err: p.q.Err()}
 			p.finish(rr, nil)
 			return

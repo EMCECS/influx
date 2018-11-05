@@ -4,11 +4,19 @@
 package builtin
 
 import (
-	"github.com/EMCECS/influx/query"
-	_ "github.com/EMCECS/influx/query/functions" // Import the built-in functions
-	_ "github.com/EMCECS/influx/query/options"   // Import the built-in options
+	"github.com/influxdata/flux"
+
+	_ "github.com/influxdata/flux/functions" // Import the built-in functions
+	_ "github.com/influxdata/flux/functions/inputs"
+	_ "github.com/influxdata/flux/functions/outputs"
+	_ "github.com/influxdata/flux/functions/transformations"
+	_ "github.com/influxdata/flux/options"             // Import the built-in options
+	_ "github.com/influxdata/platform/query/functions" // Import the built-in functions
+	_ "github.com/influxdata/platform/query/functions/inputs"
+	_ "github.com/influxdata/platform/query/functions/outputs"
+	_ "github.com/influxdata/platform/query/options" // Import the built-in options
 )
 
 func init() {
-	query.FinalizeBuiltIns()
+	flux.FinalizeBuiltIns()
 }

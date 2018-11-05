@@ -17,8 +17,6 @@ import (
 	"github.com/EMCECS/influx/chronograf/roles"
 )
 
-type MockUsers struct{}
-
 func TestService_Me(t *testing.T) {
 	type fields struct {
 		UsersStore               chronograf.UsersStore

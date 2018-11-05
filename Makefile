@@ -12,18 +12,17 @@
 #
 
 SUBDIRS := query task
-UISOURCES := $(shell find chronograf/ui -type f -not \( -path chronograf/ui/build/\* -o -path chronograf/ui/node_modules/\* -prune \) )
-YARN := $(shell command -v yarn 2> /dev/null)
-
 
 GO_ARGS=-tags '$(GO_TAGS)'
 
 # Test vars can be used by all recursive Makefiles
 export GOOS=$(shell go env GOOS)
-export GO_BUILD=go build $(GO_ARGS)
-export GO_TEST=go test $(GO_ARGS)
+export GO_BUILD=env GO111MODULE=on go build $(GO_ARGS)
+export GO_TEST=env GO111MODULE=on go test $(GO_ARGS)
+# Do not add GO111MODULE=on to the call to go generate so it doesn't pollute the environment.
 export GO_GENERATE=go generate $(GO_ARGS)
-export GO_VET= go vet $(GO_ARGS)
+export GO_VET=env GO111MODULE=on go vet $(GO_ARGS)
+export PATH := $(PWD)/bin/$(GOOS):$(PATH)
 
 
 # All go source files
@@ -32,115 +31,126 @@ SOURCES := $(shell find . -name '*.go' -not -name '*_test.go')
 # All go source files excluding the vendored sources.
 SOURCES_NO_VENDOR := $(shell find . -path ./vendor -prune -o -name "*.go" -not -name '*_test.go' -print)
 
+# All assets for chronograf
+UISOURCES := $(shell find ui -type f -not \( -path ui/build/\* -o -path ui/node_modules/\* -o -path ui/.cache/\* -o -name Makefile -prune \) )
+
+# All precanned dashboards
+PRECANNED := $(shell find chronograf/canned -name '*.json')
+
+
 # List of binary cmds to build
 CMDS := \
 	bin/$(GOOS)/influx \
-	bin/$(GOOS)/influxd \
-	bin/$(GOOS)/fluxd
-
-# List of utilities to build as part of the build process
-UTILS := \
-	bin/$(GOOS)/pigeon \
-	bin/$(GOOS)/cmpgen \
-	bin/$(GOOS)/protoc-gen-gogofaster \
-	bin/$(GOOS)/goreleaser \
-	bin/$(GOOS)/go-bindata
+	bin/$(GOOS)/influxd
 
 # Default target to build all go commands.
 #
 # This target sets up the dependencies to correctly build all go commands.
 # Other targets must depend on this target to correctly builds CMDS.
-all: vendor node_modules $(UTILS) subdirs $(CMDS)
+all: GO_ARGS=-tags 'assets $(GO_TAGS)'
+all: node_modules subdirs ui generate $(CMDS)
 
 # Target to build subdirs.
 # Each subdirs must support the `all` target.
 subdirs: $(SUBDIRS)
 	@for d in $^; do $(MAKE) -C $$d all; done
 
+
+ui:
+	$(MAKE) -C ui all
+
 #
 # Define targets for commands
 #
 $(CMDS): $(SOURCES)
-	$(GO_BUILD) -i -o $@ ./cmd/$(shell basename "$@")
+	$(GO_BUILD) -o $@ ./cmd/$(shell basename "$@")
 
 #
-# Define targets for utilities
+# Define targets for the web ui
 #
 
-bin/$(GOOS)/pigeon: ./vendor/github.com/mna/pigeon/main.go
-	go build -i -o $@  ./vendor/github.com/mna/pigeon
+node_modules: ui/node_modules
 
-bin/$(GOOS)/cmpgen: ./query/ast/asttest/cmpgen/main.go
-	go build -i -o $@ ./query/ast/asttest/cmpgen
+chronograf_lint:
+	make -C ui lint
 
-bin/$(GOOS)/protoc-gen-gogofaster: vendor $(call go_deps,./vendor/github.com/gogo/protobuf/protoc-gen-gogofaster)
-	$(GO_BUILD) -i -o $@ ./vendor/github.com/gogo/protobuf/protoc-gen-gogofaster
+ui/node_modules:
+	make -C ui node_modules
 
-bin/$(GOOS)/goreleaser: ./vendor/github.com/goreleaser/goreleaser/main.go
-	go build -i -o $@ ./vendor/github.com/goreleaser/goreleaser
-
-bin/$(GOOS)/go-bindata: ./vendor/github.com/kevinburke/go-bindata/go-bindata/main.go
-	go build -i -o $@ ./vendor/github.com/kevinburke/go-bindata/go-bindata
-
-vendor: Gopkg.lock
-	dep ensure -v -vendor-only
-
-node_modules: chronograf/ui/node_modules
-
-chronograf/ui/node_modules: chronograf/ui/yarn.lock
-ifndef YARN
-	$(error Please install yarn 0.19.1+)
-else
-	cd chronograf/ui && yarn --no-progress --no-emoji
-endif
-
-#
-# Define how source dependencies are managed
-#
-
-vendor/github.com/mna/pigeon/main.go: vendor
-vendor/github.com/goreleaser/goreleaser/main.go: vendor
-vendor/github.com/kevinburke/go-bindata/go-bindata/main.go: vendor
+ui/build:
+	mkdir -p ui/build
 
 #
 # Define action only targets
 #
 
 fmt: $(SOURCES_NO_VENDOR)
-	goimports -w $^
+	gofmt -w -s $^
 
-# generate:
-	# TODO: re-enable these after we decide on a strategy for building without running `go generate`.
-	# $(GO_GENERATE) ./chronograf/dist/...
-	# $(GO_GENERATE) ./chronograf/server/...
-	# $(GO_GENERATE) ./chronograf/canned/...
+checkfmt:
+	./etc/checkfmt.sh
+
+tidy:
+	GO111MODULE=on go mod tidy
+
+checktidy:
+	./etc/checktidy.sh
+
+chronograf/dist/dist_gen.go: ui/build $(UISOURCES)
+	 $(GO_GENERATE) ./chronograf/dist/...
+
+chronograf/server/swagger_gen.go: chronograf/server/swagger.json
+	 $(GO_GENERATE) ./chronograf/server/...
+
+chronograf/canned/bin_gen.go: $(PRECANNED)
+	 $(GO_GENERATE) ./chronograf/canned/...
+
+generate: chronograf/dist/dist_gen.go chronograf/server/swagger_gen.go chronograf/canned/bin_gen.go
 
 test-js: node_modules
-	cd chronograf/ui && yarn test --runInBand
+	make -C ui test
 
-test-go: vendor
+test-go:
 	$(GO_TEST) ./...
 
 test: test-go test-js
 
-test-go-race: vendor
+test-go-race:
 	$(GO_TEST) -race -count=1 ./...
 
 vet:
 	$(GO_VET) -v ./...
 
-bench: vendor
+bench:
 	$(GO_TEST) -bench=. -run=^$$ ./...
 
-nightly: bin/$(GOOS)/goreleaser all
-	PATH=./bin/$(GOOS):${PATH} goreleaser --snapshot --rm-dist
-	docker push quay.io/influxdb/flux:nightly
-	docker push quay.io/influxdb/influx:nightly
+nightly: all
+	env GO111MODULE=on go run github.com/goreleaser/goreleaser --snapshot --rm-dist --publish-snapshots
 
 # Recursively clean all subdirs
 clean: $(SUBDIRS)
 	@for d in $^; do $(MAKE) -C $$d $(MAKECMDGOALS); done
+	$(MAKE) -C ui $(MAKECMDGOALS)
 	rm -rf bin
 
+
+define CHRONOGIRAFFE
+             ._ o o
+             \_`-)|_
+          ,""      _\_
+        ,"  ## |   0 0.
+      ," ##   ,-\__    `.
+    ,"       /     `--._;) - "HAI, I'm Chronogiraffe. Let's be friends!"
+  ,"     ## /
+,"   ##    /
+endef
+export CHRONOGIRAFFE
+chronogiraffe: subdirs generate $(CMDS)
+	@echo "$$CHRONOGIRAFFE"
+
+run: chronogiraffe
+	./bin/$(GOOS)/influxd --developer-mode=true
+
+
 # .PHONY targets represent actions that do not create an actual file.
-.PHONY: all subdirs $(SUBDIRS) fmt test test-go test-js test-go-race bench clean node_modules vet
+.PHONY: all subdirs $(SUBDIRS) ui run fmt checkfmt tidy checktidy test test-go test-js test-go-race bench clean node_modules vet nightly chronogiraffe

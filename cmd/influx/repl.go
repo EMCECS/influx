@@ -1,18 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"math"
 	"os"
-	"runtime"
-	"strings"
 
-	"github.com/EMCECS/influx"
-	_ "github.com/EMCECS/influx/query/builtin"
-	"github.com/EMCECS/influx/query/control"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions/storage"
-	"github.com/EMCECS/influx/query/repl"
+	"github.com/influxdata/flux/repl"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/http"
+	"github.com/influxdata/platform/query"
+	_ "github.com/influxdata/platform/query/builtin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -25,57 +22,62 @@ var replCmd = &cobra.Command{
 }
 
 var replFlags struct {
-	StorageHosts string
-	OrgID        string
-	Verbose      bool
+	OrgID string
+	Org   string
 }
 
 func init() {
-	replCmd.PersistentFlags().StringVar(&replFlags.StorageHosts, "storage-hosts", "localhost:8082", "Comma-separated list of storage hosts")
-	viper.BindEnv("STORAGE_HOSTS")
-	if h := viper.GetString("STORAGE_HOSTS"); h != "" {
-		replFlags.StorageHosts = h
-	}
-
-	replCmd.PersistentFlags().BoolVarP(&replFlags.Verbose, "verbose", "v", false, "Verbose output")
-	viper.BindEnv("VERBOSE")
-	if viper.GetBool("VERBOSE") {
-		replFlags.Verbose = true
-	}
-
-	replCmd.PersistentFlags().StringVar(&replFlags.OrgID, "org-id", "", "Organization ID")
+	replCmd.PersistentFlags().StringVar(&replFlags.OrgID, "org-id", "", "ID of organization to query")
 	viper.BindEnv("ORG_ID")
 	if h := viper.GetString("ORG_ID"); h != "" {
 		replFlags.OrgID = h
 	}
+
+	replCmd.PersistentFlags().StringVarP(&replFlags.Org, "org", "o", "", "name of the organization")
+	viper.BindEnv("ORG")
+	if h := viper.GetString("ORG"); h != "" {
+		replFlags.Org = h
+	}
 }
 
 func replF(cmd *cobra.Command, args []string) {
-	hosts, err := storageHostReader(strings.Split(replFlags.StorageHosts, ","))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if flags.local {
+		fmt.Println("Local flag not supported for repl command")
 		os.Exit(1)
 	}
 
-	org, err := orgID(replFlags.OrgID)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if replFlags.OrgID == "" && replFlags.Org == "" {
+		fmt.Fprintln(os.Stderr, "must specify exactly one of org or org-id")
+		_ = cmd.Usage()
 		os.Exit(1)
 	}
 
-	buckets, err := bucketService(flags.host, flags.token)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if replFlags.OrgID != "" && replFlags.Org != "" {
+		fmt.Fprintln(os.Stderr, "must specify exactly one of org or org-id")
+		_ = cmd.Usage()
 		os.Exit(1)
 	}
 
-	orgs, err := orgService(flags.host, flags.token)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	var orgID platform.ID
+	if replFlags.OrgID != "" {
+		err := orgID.DecodeFromString(replFlags.OrgID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid org id: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
-	r, err := getFluxREPL(hosts, buckets, orgs, org, replFlags.Verbose)
+	if replFlags.Org != "" {
+		ctx := context.Background()
+		var err error
+		orgID, err = findOrgID(ctx, replFlags.Org)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unable to find organization: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	r, err := getFluxREPL(flags.host, flags.token, orgID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -84,18 +86,30 @@ func replF(cmd *cobra.Command, args []string) {
 	r.Run()
 }
 
-func getFluxREPL(storageHosts storage.Reader, buckets platform.BucketService, orgs platform.OrganizationService, org platform.ID, verbose bool) (*repl.REPL, error) {
-	conf := control.Config{
-		ExecutorDependencies: make(execute.Dependencies),
-		ConcurrencyQuota:     runtime.NumCPU() * 2,
-		MemoryBytesQuota:     math.MaxInt64,
-		Verbose:              verbose,
+func findOrgID(ctx context.Context, org string) (platform.ID, error) {
+	svc := &http.OrganizationService{
+		Addr:  flags.host,
+		Token: flags.token,
 	}
 
-	if err := injectDeps(conf.ExecutorDependencies, storageHosts, buckets, orgs); err != nil {
-		return nil, err
+	o, err := svc.FindOrganization(ctx, platform.OrganizationFilter{
+		Name: &org,
+	})
+	if err != nil {
+		return platform.InvalidID(), err
 	}
 
-	c := control.New(conf)
-	return repl.New(c, org), nil
+	return o.ID, nil
+}
+
+func getFluxREPL(addr, token string, orgID platform.ID) (*repl.REPL, error) {
+	qs := &http.FluxQueryService{
+		Addr:  addr,
+		Token: token,
+	}
+	q := &query.REPLQuerier{
+		OrganizationID: orgID,
+		QueryService:   qs,
+	}
+	return repl.New(q), nil
 }

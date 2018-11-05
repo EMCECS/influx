@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/coreos/bbolt"
@@ -32,6 +33,7 @@ type Client struct {
 
 	IDGenerator    platform.IDGenerator
 	TokenGenerator platform.TokenGenerator
+	time           func() time.Time
 }
 
 // NewClient returns an instance of a Client.
@@ -40,6 +42,7 @@ func NewClient() *Client {
 		Logger:         zap.NewNop(),
 		IDGenerator:    snowflake.NewIDGenerator(),
 		TokenGenerator: rand.NewTokenGenerator(64),
+		time:           time.Now,
 	}
 }
 
@@ -54,8 +57,19 @@ func (c *Client) WithLogger(l *zap.Logger) {
 	c.Logger = l
 }
 
+// WithTime sets the function for computing the current time. Used for updating meta data
+// about objects stored. Should only be used in tests for mocking.
+func (c *Client) WithTime(fn func() time.Time) {
+	c.time = fn
+}
+
 // Open / create boltDB file.
 func (c *Client) Open(ctx context.Context) error {
+	// Ensure the required directory structure exists.
+	if err := os.MkdirAll(filepath.Dir(c.Path), 0700); err != nil {
+		return fmt.Errorf("unable to create directory %s: %v", c.Path, err)
+	}
+
 	if _, err := os.Stat(c.Path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -67,7 +81,12 @@ func (c *Client) Open(ctx context.Context) error {
 	}
 	c.db = db
 
-	return c.initialize(context.TODO())
+	if err := c.initialize(ctx); err != nil {
+		return err
+	}
+
+	c.Logger.Info("Resources opened", zap.String("path", c.Path))
+	return nil
 }
 
 // initialize creates Buckets that are missing
@@ -98,6 +117,16 @@ func (c *Client) initialize(ctx context.Context) error {
 			return err
 		}
 
+		// Always create Onboarding bucket.
+		if err := c.initializeOnboarding(ctx, tx); err != nil {
+			return err
+		}
+
+		// Always create Telegraf Config bucket.
+		if err := c.initializeTelegraf(ctx, tx); err != nil {
+			return err
+		}
+
 		// Always create Source bucket.
 		if err := c.initializeSources(ctx, tx); err != nil {
 			return err
@@ -107,6 +136,32 @@ func (c *Client) initialize(ctx context.Context) error {
 		if err := c.initializeViews(ctx, tx); err != nil {
 			return err
 		}
+
+		// Always create Macros bucket.
+		if err := c.initializeMacros(ctx, tx); err != nil {
+			return err
+		}
+
+		// Always create Scraper bucket.
+		if err := c.initializeScraperTargets(ctx, tx); err != nil {
+			return err
+		}
+
+		// Always create UserResourceMapping bucket.
+		if err := c.initializeUserResourceMappings(ctx, tx); err != nil {
+			return err
+		}
+
+		// Always create Session bucket.
+		if err := c.initializeSessions(ctx, tx); err != nil {
+			return err
+		}
+
+		// Always create KeyValueLog bucket.
+		if err := c.initializeKeyValueLog(ctx, tx); err != nil {
+			return err
+		}
+
 		return nil
 	}); err != nil {
 		return err

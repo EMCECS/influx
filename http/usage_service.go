@@ -23,11 +23,11 @@ func NewUsageHandler() *UsageHandler {
 		Router: httprouter.New(),
 	}
 
-	h.HandlerFunc("GET", "/v1/usage", h.handleGetUsage)
+	h.HandlerFunc("GET", "/api/v2/usage", h.handleGetUsage)
 	return h
 }
 
-// handleGetUsage is the HTTP handler for the GET /v1/usage route.
+// handleGetUsage is the HTTP handler for the GET /api/v2/usage route.
 func (h *UsageHandler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -81,7 +81,7 @@ func decodeGetUsageRequest(ctx context.Context, r *http.Request) (*getUsageReque
 	if start == "" && stop != "" {
 		return nil, errors.New("start query param required")
 	}
-	if start == "" && stop != "" {
+	if stop == "" && start != "" {
 		return nil, errors.New("stop query param required")
 	}
 
@@ -101,7 +101,7 @@ func decodeGetUsageRequest(ctx context.Context, r *http.Request) (*getUsageReque
 			return nil, err
 		}
 
-		stopTime, err := time.Parse(time.RFC3339, start)
+		stopTime, err := time.Parse(time.RFC3339, stop)
 		if err != nil {
 			return nil, err
 		}

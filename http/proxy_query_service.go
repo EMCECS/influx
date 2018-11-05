@@ -8,14 +8,15 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/EMCECS/influx/query"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/platform/query"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
-	proxyQueryPath = "/v1/query"
+	proxyQueryPath = "/api/v2/queryproxysvc"
 )
 
 type ProxyQueryHandler struct {
@@ -25,8 +26,8 @@ type ProxyQueryHandler struct {
 
 	ProxyQueryService query.ProxyQueryService
 
-	CompilerMappings query.CompilerMappings
-	DialectMappings  query.DialectMappings
+	CompilerMappings flux.CompilerMappings
+	DialectMappings  flux.DialectMappings
 }
 
 // NewProxyQueryHandler returns a new instance of ProxyQueryHandler.

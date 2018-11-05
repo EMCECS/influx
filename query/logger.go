@@ -3,7 +3,8 @@ package query
 import (
 	"time"
 
-	"github.com/EMCECS/influx"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/platform"
 )
 
 // Logger persists metadata about executed queries.
@@ -25,7 +26,7 @@ type Log struct {
 	// ResponseSize is the size in bytes of the query response
 	ResponseSize int64
 	// Statistics is a set of statistics about the query execution
-	Statistics Statistics
+	Statistics flux.Statistics
 }
 
 // Redact removes any sensitive information before logging

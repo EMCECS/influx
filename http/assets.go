@@ -10,13 +10,13 @@ import (
 
 const (
 	// Dir is prefix of the assets in the bindata
-	Dir = "../chronograf/ui/build"
+	Dir = "../ui/build"
 	// Default is the default item to load if 404
-	Default = "../chronograf/ui/build/index.html"
+	Default = "../ui/build/index.html"
 	// DebugDir is the prefix of the assets in development mode
-	DebugDir = "chronograf/ui/build"
+	DebugDir = "ui/build"
 	// DebugDefault is the default item to load if 404
-	DebugDefault = "chronograf/ui/build/index.html"
+	DebugDefault = "ui/build/index.html"
 	// DefaultContentType is the content-type to return for the Default file
 	DefaultContentType = "text/html; charset=utf-8"
 )

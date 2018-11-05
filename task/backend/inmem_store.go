@@ -1,15 +1,15 @@
 package backend
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/snowflake"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/snowflake"
+	"github.com/influxdata/platform/task/options"
 )
 
 var _ Store = (*inmem)(nil)
@@ -36,10 +36,10 @@ func NewInMemStore() Store {
 	}
 }
 
-func (s *inmem) CreateTask(_ context.Context, org, user platform.ID, script string, scheduleAfter int64) (platform.ID, error) {
-	o, err := StoreValidator.CreateArgs(org, user, script)
+func (s *inmem) CreateTask(_ context.Context, req CreateTaskRequest) (platform.ID, error) {
+	o, err := StoreValidator.CreateArgs(req)
 	if err != nil {
-		return nil, err
+		return platform.InvalidID(), err
 	}
 
 	id := s.idgen.ID()
@@ -47,67 +47,90 @@ func (s *inmem) CreateTask(_ context.Context, org, user platform.ID, script stri
 	task := StoreTask{
 		ID: id,
 
-		Org:  org,
-		User: user,
+		Org:  req.Org,
+		User: req.User,
 
 		Name: o.Name,
 
-		Script: script,
+		Script: req.Script,
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, t := range s.tasks {
-		if t.Name == task.Name && (bytes.Equal(t.Org, org) || bytes.Equal(t.User, user)) {
-			return nil, ErrTaskNameTaken
-		}
-	}
+
 	s.tasks = append(s.tasks, task)
-	s.runners[id.String()] = StoreTaskMeta{
+
+	stm := StoreTaskMeta{
 		MaxConcurrency:  int32(o.Concurrency),
-		Status:          string(TaskEnabled),
-		LatestCompleted: scheduleAfter,
+		Status:          string(req.Status),
+		LatestCompleted: req.ScheduleAfter,
 		EffectiveCron:   o.EffectiveCronString(),
 		Delay:           int32(o.Delay / time.Second),
 	}
+	if stm.Status == "" {
+		stm.Status = string(DefaultTaskStatus)
+	}
+	s.runners[id.String()] = stm
 
 	return id, nil
 }
 
-func (s *inmem) ModifyTask(_ context.Context, id platform.ID, script string) error {
-	op, err := StoreValidator.ModifyArgs(id, script)
+func (s *inmem) UpdateTask(_ context.Context, req UpdateTaskRequest) (UpdateTaskResult, error) {
+	var res UpdateTaskResult
+	op, err := StoreValidator.UpdateArgs(req)
 	if err != nil {
-		return err
+		return res, err
 	}
+
+	idStr := req.ID.String()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	found := false
 	for n, t := range s.tasks {
-		if !bytes.Equal(t.ID, id) {
+		if t.ID != req.ID {
 			continue
 		}
+		found = true
 
-
-		if t.Name != op.Name {
-			for i := range s.tasks {
-				tt := s.tasks[i]
-				if tt.Name == op.Name && i != n && (bytes.Equal(tt.Org, t.Org) || bytes.Equal(tt.User, t.User)) {
-					return ErrTaskNameTaken
-				}
+		res.OldScript = t.Script
+		if req.Script == "" {
+			op, err = options.FromScript(t.Script)
+			if err != nil {
+				return res, err
 			}
-			t.Name = op.Name
+		} else {
+			t.Script = req.Script
 		}
-		t.Script = script
+		t.Name = op.Name
+
 		s.tasks[n] = t
-		return nil
+		res.NewTask = t
+		break
+	}
+	if !found {
+		return res, fmt.Errorf("ModifyTask: record not found for %s", idStr)
 	}
 
-	return fmt.Errorf("ModifyTask: record not found for %s", id)
+	stm, ok := s.runners[idStr]
+	if !ok {
+		panic("inmem store: had task without runner for task ID " + idStr)
+	}
+	res.OldStatus = TaskStatus(stm.Status)
+
+	if req.Status != "" {
+		// Changing the status.
+		stm.Status = string(req.Status)
+		s.runners[idStr] = stm
+	}
+	res.NewMeta = stm
+
+	return res, nil
 }
 
-func (s *inmem) ListTasks(_ context.Context, params TaskSearchParams) ([]StoreTask, error) {
-	if len(params.Org) > 0 && len(params.User) > 0 {
+func (s *inmem) ListTasks(_ context.Context, params TaskSearchParams) ([]StoreTaskWithMeta, error) {
+	if params.Org.Valid() && params.User.Valid() {
 		return nil, errors.New("ListTasks: org and user filters are mutually exclusive")
 	}
 
@@ -128,30 +151,41 @@ func (s *inmem) ListTasks(_ context.Context, params TaskSearchParams) ([]StoreTa
 		lim = defaultPageSize
 	}
 
-	out := make([]StoreTask, 0, lim)
+	out := make([]StoreTaskWithMeta, 0, lim)
 
 	org := params.Org
 	user := params.User
-	after := params.After
+
+	var after platform.ID
+	if !params.After.Valid() {
+		after = platform.ID(1)
+	} else {
+		after = params.After
+	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for _, t := range s.tasks {
-		if len(after) > 0 && bytes.Compare(after, t.ID) >= 0 {
+		if after >= t.ID {
 			continue
 		}
-		if len(org) > 0 && !bytes.Equal(org, t.Org) {
+		if org.Valid() && org != t.Org {
 			continue
 		}
-		if len(user) > 0 && !bytes.Equal(user, t.User) {
+		if user.Valid() && user != t.User {
 			continue
 		}
 
-		out = append(out, t)
+		out = append(out, StoreTaskWithMeta{Task: t})
 		if len(out) >= lim {
 			break
 		}
+	}
+
+	for i := range out {
+		id := out[i].Task.ID
+		out[i].Meta = s.runners[id.String()]
 	}
 
 	return out, nil
@@ -162,7 +196,7 @@ func (s *inmem) FindTaskByID(_ context.Context, id platform.ID) (*StoreTask, err
 	defer s.mu.RUnlock()
 
 	for _, t := range s.tasks {
-		if bytes.Equal(t.ID, id) {
+		if t.ID == id {
 			// Return a copy of the task.
 			task := new(StoreTask)
 			*task = t
@@ -170,44 +204,41 @@ func (s *inmem) FindTaskByID(_ context.Context, id platform.ID) (*StoreTask, err
 		}
 	}
 
-	return nil, nil
+	return nil, ErrTaskNotFound
 }
 
-func (s *inmem) EnableTask(ctx context.Context, id platform.ID) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *inmem) FindTaskByIDWithMeta(_ context.Context, id platform.ID) (*StoreTask, *StoreTaskMeta, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	strID := id.String()
-
-	meta, ok := s.runners[strID]
-	if !ok {
-		return errors.New("task meta not found")
+	var task *StoreTask
+	for _, t := range s.tasks {
+		if t.ID == id {
+			// Return a copy of the task.
+			task = new(StoreTask)
+			*task = t
+			break
+		}
 	}
-	meta.Status = string(TaskEnabled)
-	s.runners[strID] = meta
-
-	return nil
-}
-
-func (s *inmem) DisableTask(ctx context.Context, id platform.ID) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	strID := id.String()
-
-	meta, ok := s.runners[strID]
-	if !ok {
-		return errors.New("task meta not found")
+	if task == nil {
+		return nil, nil, ErrTaskNotFound
 	}
-	meta.Status = string(TaskDisabled)
-	s.runners[strID] = meta
 
-	return nil
+	meta, ok := s.runners[id.String()]
+	if !ok {
+		return nil, nil, errors.New("task meta not found")
+	}
+
+	return task, &meta, nil
 }
 
 func (s *inmem) FindTaskMetaByID(ctx context.Context, id platform.ID) (*StoreTaskMeta, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	meta, ok := s.runners[id.String()]
 	if !ok {
-		return nil, errors.New("task meta not found")
+		return nil, ErrTaskNotFound
 	}
 
 	return &meta, nil
@@ -219,7 +250,7 @@ func (s *inmem) DeleteTask(_ context.Context, id platform.ID) (deleted bool, err
 
 	idx := -1
 	for i, t := range s.tasks {
-		if bytes.Equal(t.ID, id) {
+		if t.ID == id {
 			idx = i
 			break
 		}
@@ -254,7 +285,7 @@ func (s *inmem) CreateNextRun(ctx context.Context, taskID platform.ID, now int64
 	if err != nil {
 		return RunCreation{}, err
 	}
-	rc.Created.TaskID = append([]byte(nil), taskID...)
+	rc.Created.TaskID = taskID
 
 	s.runners[taskID.String()] = stm
 	return rc, nil
@@ -262,7 +293,10 @@ func (s *inmem) CreateNextRun(ctx context.Context, taskID platform.ID, now int64
 
 // FinishRun removes runID from the list of running tasks and if its `now` is later then last completed update it.
 func (s *inmem) FinishRun(ctx context.Context, taskID, runID platform.ID) error {
+	s.mu.RLock()
 	stm, ok := s.runners[taskID.String()]
+	s.mu.RUnlock()
+
 	if !ok {
 		return errors.New("taskRunner not found")
 	}
@@ -303,7 +337,7 @@ func (s *inmem) delete(ctx context.Context, id platform.ID, f func(StoreTask) pl
 	newTasks := []StoreTask{}
 	deletingTasks := []platform.ID{}
 	for i := range s.tasks {
-		if !bytes.Equal(f(s.tasks[i]), id) {
+		if f(s.tasks[i]) != id {
 			newTasks = append(newTasks, s.tasks[i])
 		} else {
 			deletingTasks = append(deletingTasks, s.tasks[i].ID)

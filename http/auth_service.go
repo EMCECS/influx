@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"path"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -29,15 +31,49 @@ func NewAuthorizationHandler() *AuthorizationHandler {
 		Router: httprouter.New(),
 	}
 
-	h.HandlerFunc("POST", "/v1/authorizations", h.handlePostAuthorization)
-	h.HandlerFunc("GET", "/v1/authorizations", h.handleGetAuthorizations)
-	h.HandlerFunc("GET", "/v1/authorizations/:id", h.handleGetAuthorization)
-	h.HandlerFunc("PATCH", "/v1/authorizations/:id", h.handleSetAuthorizationStatus)
-	h.HandlerFunc("DELETE", "/v1/authorizations/:id", h.handleDeleteAuthorization)
+	h.HandlerFunc("POST", "/api/v2/authorizations", h.handlePostAuthorization)
+	h.HandlerFunc("GET", "/api/v2/authorizations", h.handleGetAuthorizations)
+	h.HandlerFunc("GET", "/api/v2/authorizations/:id", h.handleGetAuthorization)
+	h.HandlerFunc("PATCH", "/api/v2/authorizations/:id", h.handleSetAuthorizationStatus)
+	h.HandlerFunc("DELETE", "/api/v2/authorizations/:id", h.handleDeleteAuthorization)
 	return h
 }
 
-// handlePostAuthorization is the HTTP handler for the POST /v1/authorizations route.
+type authResponse struct {
+	Links map[string]string `json:"links"`
+	platform.Authorization
+}
+
+func newAuthResponse(a *platform.Authorization) *authResponse {
+	return &authResponse{
+		Links: map[string]string{
+			"self": fmt.Sprintf("/api/v2/authorizations/%s", a.ID),
+			"user": fmt.Sprintf("/api/v2/users/%s", a.UserID),
+		},
+		Authorization: *a,
+	}
+}
+
+type authsResponse struct {
+	Links map[string]string `json:"links"`
+	Auths []*authResponse   `json:"auths"`
+}
+
+func newAuthsResponse(opts platform.FindOptions, f platform.AuthorizationFilter, as []*platform.Authorization) *authsResponse {
+	rs := make([]*authResponse, 0, len(as))
+	for _, a := range as {
+		rs = append(rs, newAuthResponse(a))
+	}
+	return &authsResponse{
+		// TODO(desa): update links to include paging and filter information
+		Links: map[string]string{
+			"self": "/api/v2/authorizations",
+		},
+		Auths: rs,
+	}
+}
+
+// handlePostAuthorization is the HTTP handler for the POST /api/v2/authorizations route.
 func (h *AuthorizationHandler) handlePostAuthorization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -56,7 +92,7 @@ func (h *AuthorizationHandler) handlePostAuthorization(w http.ResponseWriter, r 
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusCreated, req.Authorization); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusCreated, newAuthResponse(req.Authorization)); err != nil {
 		h.Logger.Info("failed to encode response", zap.String("handler", "postAuthorization"), zap.Error(err))
 		EncodeError(ctx, err, w)
 		return
@@ -78,7 +114,7 @@ func decodePostAuthorizationRequest(ctx context.Context, r *http.Request) (*post
 	}, nil
 }
 
-// handleGetAuthorizations is the HTTP handler for the GET /v1/authorizations route.
+// handleGetAuthorizations is the HTTP handler for the GET /api/v2/authorizations route.
 func (h *AuthorizationHandler) handleGetAuthorizations(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -89,14 +125,19 @@ func (h *AuthorizationHandler) handleGetAuthorizations(w http.ResponseWriter, r 
 		return
 	}
 
-	as, _, err := h.AuthorizationService.FindAuthorizations(ctx, req.filter)
+	opts := platform.FindOptions{}
+	as, _, err := h.AuthorizationService.FindAuthorizations(ctx, req.filter, opts)
 	if err != nil {
+		// TODO(desa): fix this when using real errors library
+		if strings.Contains(err.Error(), "not found") {
+			err = kerrors.New(err.Error(), kerrors.NotFound)
+		}
 		// Don't log here, it should already be handled by the service
 		EncodeError(ctx, err, w)
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusOK, as); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusOK, newAuthsResponse(opts, req.filter, as)); err != nil {
 		h.Logger.Info("failed to encode response", zap.String("handler", "getAuthorizations"), zap.Error(err))
 		EncodeError(ctx, err, w)
 		return
@@ -114,10 +155,11 @@ func decodeGetAuthorizationsRequest(ctx context.Context, r *http.Request) (*getA
 
 	userID := qp.Get("userID")
 	if userID != "" {
-		req.filter.UserID = &platform.ID{}
-		if err := req.filter.UserID.DecodeFromString(userID); err != nil {
+		id, err := platform.IDFromString(userID)
+		if err != nil {
 			return nil, err
 		}
+		req.filter.UserID = id
 	}
 
 	user := qp.Get("user")
@@ -127,16 +169,17 @@ func decodeGetAuthorizationsRequest(ctx context.Context, r *http.Request) (*getA
 
 	authID := qp.Get("id")
 	if authID != "" {
-		req.filter.ID = &platform.ID{}
-		if err := req.filter.ID.DecodeFromString(authID); err != nil {
+		id, err := platform.IDFromString(authID)
+		if err != nil {
 			return nil, err
 		}
+		req.filter.ID = id
 	}
 
 	return req, nil
 }
 
-// handleGetAuthorization is the HTTP handler for the GET /v1/authorizations/:id route.
+// handleGetAuthorization is the HTTP handler for the GET /api/v2/authorizations/:id route.
 func (h *AuthorizationHandler) handleGetAuthorization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -149,12 +192,16 @@ func (h *AuthorizationHandler) handleGetAuthorization(w http.ResponseWriter, r *
 
 	a, err := h.AuthorizationService.FindAuthorizationByID(ctx, req.ID)
 	if err != nil {
+		// TODO(desa): fix this when using real errors library
+		if strings.Contains(err.Error(), "not found") {
+			err = kerrors.New(err.Error(), kerrors.NotFound)
+		}
 		// Don't log here, it should already be handled by the service
 		EncodeError(ctx, err, w)
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusOK, a); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusOK, newAuthResponse(a)); err != nil {
 		h.Logger.Info("failed to encode response", zap.String("handler", "getAuthorization"), zap.Error(err))
 		EncodeError(ctx, err, w)
 		return
@@ -182,7 +229,7 @@ func decodeGetAuthorizationRequest(ctx context.Context, r *http.Request) (*getAu
 	}, nil
 }
 
-// handleSetAuthorizationStatus is the HTTP handler for the PATCH /v1/authorizations/:id route that updates the authorization's status.
+// handleSetAuthorizationStatus is the HTTP handler for the PATCH /api/v2/authorizations/:id route that updates the authorization's status.
 func (h *AuthorizationHandler) handleSetAuthorizationStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -195,6 +242,10 @@ func (h *AuthorizationHandler) handleSetAuthorizationStatus(w http.ResponseWrite
 
 	a, err := h.AuthorizationService.FindAuthorizationByID(ctx, req.ID)
 	if err != nil {
+		// TODO(desa): fix this when using real errors library
+		if strings.Contains(err.Error(), "not found") {
+			err = kerrors.New(err.Error(), kerrors.NotFound)
+		}
 		EncodeError(ctx, err, w)
 		return
 	}
@@ -207,7 +258,7 @@ func (h *AuthorizationHandler) handleSetAuthorizationStatus(w http.ResponseWrite
 		}
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusOK, a); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusOK, newAuthResponse(a)); err != nil {
 		h.Logger.Info("failed to encode response", zap.String("handler", "updateAuthorization"), zap.Error(err))
 		EncodeError(ctx, err, w)
 		return
@@ -248,7 +299,7 @@ func decodeSetAuthorizationStatusRequest(ctx context.Context, r *http.Request) (
 	}, nil
 }
 
-// handleDeleteAuthorization is the HTTP handler for the DELETE /v1/authorizations/:id route.
+// handleDeleteAuthorization is the HTTP handler for the DELETE /api/v2/authorizations/:id route.
 func (h *AuthorizationHandler) handleDeleteAuthorization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -260,12 +311,16 @@ func (h *AuthorizationHandler) handleDeleteAuthorization(w http.ResponseWriter, 
 	}
 
 	if err := h.AuthorizationService.DeleteAuthorization(ctx, req.ID); err != nil {
+		// TODO(desa): fix this when using real errors library
+		if strings.Contains(err.Error(), "not found") {
+			err = kerrors.New(err.Error(), kerrors.NotFound)
+		}
 		// Don't log here, it should already be handled by the service
 		EncodeError(ctx, err, w)
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type deleteAuthorizationRequest struct {
@@ -375,17 +430,22 @@ func (s *AuthorizationService) FindAuthorizations(ctx context.Context, filter pl
 		return nil, 0, err
 	}
 
-	var bs []*platform.Authorization
+	var bs authsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&bs); err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
-	return bs, len(bs), nil
+	auths := make([]*platform.Authorization, 0, len(bs.Auths))
+	for _, b := range bs.Auths {
+		auths = append(auths, &b.Authorization)
+	}
+
+	return auths, len(auths), nil
 }
 
 const (
-	authorizationPath = "/v1/authorizations"
+	authorizationPath = "/api/v2/authorizations"
 )
 
 // CreateAuthorization creates a new authorization and sets b.ID with the new identifier.

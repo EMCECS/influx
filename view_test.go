@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/EMCECS/influx"
+	"github.com/influxdata/platform"
+	platformtesting "github.com/influxdata/platform/testing"
 )
 
 func TestView_MarshalJSON(t *testing.T) {
@@ -24,10 +25,10 @@ func TestView_MarshalJSON(t *testing.T) {
 			args: args{
 				view: platform.View{
 					ViewContents: platform.ViewContents{
-						ID:   platform.ID("0"),
+						ID:   platformtesting.MustIDBase16("f01dab1ef005ba11"),
 						Name: "hello",
 					},
-					Properties: platform.V1ViewProperties{
+					Properties: platform.LineViewProperties{
 						Type: "line",
 					},
 				},
@@ -35,31 +36,15 @@ func TestView_MarshalJSON(t *testing.T) {
 			wants: wants{
 				json: `
 {
-  "id": "30",
+  "id": "f01dab1ef005ba11",
   "name": "hello",
   "properties": {
-    "shape": "chronograf-v1",
+    "shape": "chronograf-v2",
     "queries": null,
     "axes": null,
     "type": "line",
     "colors": null,
-    "legend": {},
-    "tableOptions": {
-      "verticalTimeAxis": false,
-      "sortBy": {
-        "internalName": "",
-        "displayName": "",
-        "visible": false
-      },
-      "wrapping": "",
-      "fixFirstColumn": false
-    },
-    "fieldOptions": null,
-    "timeFormat": "",
-    "decimalPlaces": {
-      "isEnforced": false,
-      "digits": 0
-    }
+    "legend": {}
   }
 }
 `,
@@ -76,7 +61,7 @@ func TestView_MarshalJSON(t *testing.T) {
 
 			eq, err := jsonEqual(string(b), tt.wants.json)
 			if err != nil {
-				t.Fatalf("error marshalling json")
+				t.Fatalf("error marshalling json %v", err)
 			}
 			if !eq {
 				t.Errorf("JSON did not match\nexpected:%s\ngot:\n%s\n", tt.wants.json, string(b))

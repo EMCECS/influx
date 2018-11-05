@@ -3,71 +3,49 @@ package influxql
 import (
 	"fmt"
 
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/functions/transformations"
 	"github.com/influxdata/influxql"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/semantic"
 )
 
 type joinCursor struct {
-	id    query.OperationID
+	id    flux.OperationID
 	m     map[influxql.Expr]string
 	exprs []influxql.Expr
 }
 
-func Join(t *transpilerState, cursors []cursor, on, except []string) cursor {
+func Join(t *transpilerState, cursors []cursor, on []string) cursor {
 	if len(cursors) == 1 {
 		return cursors[0]
 	}
 
 	// Iterate through each cursor and each expression within each cursor to assign them an id.
-	var (
-		exprs      []influxql.Expr
-		properties []*semantic.Property
-	)
+	var exprs []influxql.Expr
 	m := make(map[influxql.Expr]string)
-	tables := make(map[query.OperationID]string)
+	tables := make(map[flux.OperationID]string)
 	for i, cur := range cursors {
 		// Record this incoming cursor within the table.
 		tableName := fmt.Sprintf("t%d", i)
 		tables[cur.ID()] = tableName
 
 		for _, k := range cur.Keys() {
-			// Generate a name for accessing this expression and generate the index entries for it.
-			name := fmt.Sprintf("val%d", len(exprs))
+			// Combine the table name with the name to access this attribute so we can know
+			// what it will be mapped to.
+			varName, _ := cur.Value(k)
+			name := fmt.Sprintf("%s_%s", tableName, varName)
 			exprs = append(exprs, k)
 			m[k] = name
-
-			property := &semantic.Property{
-				Key: &semantic.Identifier{Name: name},
-				Value: &semantic.MemberExpression{
-					Object: &semantic.IdentifierExpression{
-						Name: "tables",
-					},
-					Property: tableName,
-				},
-			}
-			if valName, _ := cur.Value(k); valName != execute.DefaultValueColLabel {
-				property.Value = &semantic.MemberExpression{
-					Object:   property.Value,
-					Property: valName,
-				}
-			}
-			properties = append(properties, property)
 		}
 	}
 
 	// Retrieve the parent ids from the cursors.
-	parents := make([]query.OperationID, 0, len(tables))
+	parents := make([]flux.OperationID, 0, len(tables))
 	for _, cur := range cursors {
 		parents = append(parents, cur.ID())
 	}
-	id := t.op("join", &functions.JoinOpSpec{
+	id := t.op("join", &transformations.JoinOpSpec{
 		TableNames: tables,
 		On:         on,
-		// TODO(jsternberg): This option needs to be included.
-		//Except: except,
 	}, parents...)
 	return &joinCursor{
 		id:    id,
@@ -76,7 +54,7 @@ func Join(t *transpilerState, cursors []cursor, on, except []string) cursor {
 	}
 }
 
-func (c *joinCursor) ID() query.OperationID {
+func (c *joinCursor) ID() flux.OperationID {
 	return c.id
 }
 

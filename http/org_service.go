@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"path"
+	"strconv"
 
 	"github.com/EMCECS/influx"
 	kerrors "github.com/EMCECS/influx/kit/errors"
@@ -17,24 +18,93 @@ import (
 type OrgHandler struct {
 	*httprouter.Router
 
-	OrganizationService platform.OrganizationService
+	OrganizationService             platform.OrganizationService
+	OrganizationOperationLogService platform.OrganizationOperationLogService
+	BucketService                   platform.BucketService
+	UserResourceMappingService      platform.UserResourceMappingService
 }
 
+const (
+	organizationsPath            = "/api/v2/orgs"
+	organizationsIDPath          = "/api/v2/orgs/:id"
+	organizationsIDLogPath       = "/api/v2/orgs/:id/log"
+	organizationsIDMembersPath   = "/api/v2/orgs/:id/members"
+	organizationsIDMembersIDPath = "/api/v2/orgs/:id/members/:organizationID"
+	organizationsIDOwnersPath    = "/api/v2/orgs/:id/owners"
+	organizationsIDOwnersIDPath  = "/api/v2/orgs/:id/owners/:organizationID"
+)
+
 // NewOrgHandler returns a new instance of OrgHandler.
-func NewOrgHandler() *OrgHandler {
+func NewOrgHandler(mappingService platform.UserResourceMappingService) *OrgHandler {
 	h := &OrgHandler{
-		Router: httprouter.New(),
+		Router:                     httprouter.New(),
+		UserResourceMappingService: mappingService,
 	}
 
-	h.HandlerFunc("POST", "/v1/orgs", h.handlePostOrg)
-	h.HandlerFunc("GET", "/v1/orgs", h.handleGetOrgs)
-	h.HandlerFunc("GET", "/v1/orgs/:id", h.handleGetOrg)
-	h.HandlerFunc("PATCH", "/v1/orgs/:id", h.handlePatchOrg)
-	h.HandlerFunc("DELETE", "/v1/orgs/:id", h.handleDeleteOrg)
+	h.HandlerFunc("POST", organizationsPath, h.handlePostOrg)
+	h.HandlerFunc("GET", organizationsPath, h.handleGetOrgs)
+	h.HandlerFunc("GET", organizationsIDPath, h.handleGetOrg)
+	h.HandlerFunc("GET", organizationsIDLogPath, h.handleGetOrgLog)
+	h.HandlerFunc("PATCH", organizationsIDPath, h.handlePatchOrg)
+	h.HandlerFunc("DELETE", organizationsIDPath, h.handleDeleteOrg)
+
+	h.HandlerFunc("POST", organizationsIDMembersPath, newPostMemberHandler(h.UserResourceMappingService, platform.OrgResourceType, platform.Member))
+	h.HandlerFunc("GET", organizationsIDMembersPath, newGetMembersHandler(h.UserResourceMappingService, platform.Member))
+	h.HandlerFunc("DELETE", organizationsIDMembersIDPath, newDeleteMemberHandler(h.UserResourceMappingService, platform.Member))
+
+	h.HandlerFunc("POST", organizationsIDOwnersPath, newPostMemberHandler(h.UserResourceMappingService, platform.OrgResourceType, platform.Owner))
+	h.HandlerFunc("GET", organizationsIDOwnersPath, newGetMembersHandler(h.UserResourceMappingService, platform.Owner))
+	h.HandlerFunc("DELETE", organizationsIDOwnersIDPath, newDeleteMemberHandler(h.UserResourceMappingService, platform.Owner))
+
 	return h
 }
 
-// handlePostOrg is the HTTP handler for the POST /v1/orgs route.
+type orgsResponse struct {
+	Links         map[string]string `json:"links"`
+	Organizations []*orgResponse    `json:"orgs"`
+}
+
+func (o orgsResponse) ToPlatform() []*platform.Organization {
+	orgs := make([]*platform.Organization, len(o.Organizations))
+	for i := range o.Organizations {
+		orgs[i] = &o.Organizations[i].Organization
+	}
+	return orgs
+}
+
+func newOrgsResponse(orgs []*platform.Organization) *orgsResponse {
+	res := orgsResponse{
+		Links: map[string]string{
+			"self": "/api/v2/orgs",
+		},
+		Organizations: []*orgResponse{},
+	}
+	for _, org := range orgs {
+		res.Organizations = append(res.Organizations, newOrgResponse(org))
+	}
+	return &res
+}
+
+type orgResponse struct {
+	Links map[string]string `json:"links"`
+	platform.Organization
+}
+
+func newOrgResponse(o *platform.Organization) *orgResponse {
+	return &orgResponse{
+		Links: map[string]string{
+			"self":       fmt.Sprintf("/api/v2/orgs/%s", o.ID),
+			"log":        fmt.Sprintf("/api/v2/orgs/%s/log", o.ID),
+			"members":    fmt.Sprintf("/api/v2/orgs/%s/members", o.ID),
+			"buckets":    fmt.Sprintf("/api/v2/buckets?org=%s", o.Name),
+			"tasks":      fmt.Sprintf("/api/v2/tasks?org=%s", o.Name),
+			"dashboards": fmt.Sprintf("/api/v2/dashboards?org=%s", o.Name),
+		},
+		Organization: *o,
+	}
+}
+
+// handlePostOrg is the HTTP handler for the POST /api/v2/orgs route.
 func (h *OrgHandler) handlePostOrg(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -49,7 +119,7 @@ func (h *OrgHandler) handlePostOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusCreated, req.Org); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusCreated, newOrgResponse(req.Org)); err != nil {
 		EncodeError(ctx, err, w)
 		return
 	}
@@ -70,7 +140,7 @@ func decodePostOrgRequest(ctx context.Context, r *http.Request) (*postOrgRequest
 	}, nil
 }
 
-// handleGetOrg is the HTTP handler for the GET /v1/orgs/:id route.
+// handleGetOrg is the HTTP handler for the GET /api/v2/orgs/:id route.
 func (h *OrgHandler) handleGetOrg(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -86,7 +156,7 @@ func (h *OrgHandler) handleGetOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusOK, b); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusOK, newOrgResponse(b)); err != nil {
 		EncodeError(ctx, err, w)
 		return
 	}
@@ -115,7 +185,7 @@ func decodeGetOrgRequest(ctx context.Context, r *http.Request) (*getOrgRequest, 
 	return req, nil
 }
 
-// handleGetOrgs is the HTTP handler for the GET /v1/orgs route.
+// handleGetOrgs is the HTTP handler for the GET /api/v2/orgs route.
 func (h *OrgHandler) handleGetOrgs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -131,7 +201,7 @@ func (h *OrgHandler) handleGetOrgs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusOK, orgs); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusOK, newOrgsResponse(orgs)); err != nil {
 		EncodeError(ctx, err, w)
 		return
 	}
@@ -145,11 +215,12 @@ func decodeGetOrgsRequest(ctx context.Context, r *http.Request) (*getOrgsRequest
 	qp := r.URL.Query()
 	req := &getOrgsRequest{}
 
-	if id := qp.Get("id"); id != "" {
-		req.filter.ID = &platform.ID{}
-		if err := req.filter.ID.DecodeFromString(id); err != nil {
+	if orgID := qp.Get("id"); orgID != "" {
+		id, err := platform.IDFromString(orgID)
+		if err != nil {
 			return nil, err
 		}
+		req.filter.ID = id
 	}
 
 	if name := qp.Get("name"); name != "" {
@@ -159,7 +230,7 @@ func decodeGetOrgsRequest(ctx context.Context, r *http.Request) (*getOrgsRequest
 	return req, nil
 }
 
-// handleDeleteOrganization is the HTTP handler for the DELETE /v1/organizations/:id route.
+// handleDeleteOrganization is the HTTP handler for the DELETE /api/v2/orgs/:id route.
 func (h *OrgHandler) handleDeleteOrg(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -174,7 +245,7 @@ func (h *OrgHandler) handleDeleteOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type deleteOrganizationRequest struct {
@@ -199,7 +270,7 @@ func decodeDeleteOrganizationRequest(ctx context.Context, r *http.Request) (*del
 	return req, nil
 }
 
-// handlePatchOrg is the HTTP handler for the PATH /v1/orgs route.
+// handlePatchOrg is the HTTP handler for the PATH /api/v2/orgs route.
 func (h *OrgHandler) handlePatchOrg(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -215,7 +286,7 @@ func (h *OrgHandler) handlePatchOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := encodeResponse(ctx, w, http.StatusOK, o); err != nil {
+	if err := encodeResponse(ctx, w, http.StatusOK, newOrgResponse(o)); err != nil {
 		EncodeError(ctx, err, w)
 		return
 	}
@@ -250,7 +321,7 @@ func decodePatchOrgRequest(ctx context.Context, r *http.Request) (*patchOrgReque
 }
 
 const (
-	organizationPath = "/v1/orgs"
+	organizationPath = "/api/v2/orgs"
 )
 
 // OrganizationService connects to Influx via HTTP using tokens to manage organizations.
@@ -260,24 +331,27 @@ type OrganizationService struct {
 	InsecureSkipVerify bool
 }
 
+// FindOrganizationByID gets a single organization with a given id using HTTP.
 func (s *OrganizationService) FindOrganizationByID(ctx context.Context, id platform.ID) (*platform.Organization, error) {
 	filter := platform.OrganizationFilter{ID: &id}
 	return s.FindOrganization(ctx, filter)
 }
 
+// FindOrganization gets a single organization matching the filter using HTTP.
 func (s *OrganizationService) FindOrganization(ctx context.Context, filter platform.OrganizationFilter) (*platform.Organization, error) {
 	os, n, err := s.FindOrganizations(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if n < 1 {
-		return nil, errors.New("expected at least one organization")
+	if n == 0 {
+		return nil, ErrNotFound
 	}
 
 	return os[0], nil
 }
 
+// FindOrganizations returns all organizations that match the filter via HTTP.
 func (s *OrganizationService) FindOrganizations(ctx context.Context, filter platform.OrganizationFilter, opt ...platform.FindOptions) ([]*platform.Organization, int, error) {
 	url, err := newURL(s.Addr, organizationPath)
 	if err != nil {
@@ -310,12 +384,13 @@ func (s *OrganizationService) FindOrganizations(ctx context.Context, filter plat
 		return nil, 0, err
 	}
 
-	var os []*platform.Organization
+	var os orgsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&os); err != nil {
 		return nil, 0, err
 	}
 
-	return os, len(os), nil
+	orgs := os.ToPlatform()
+	return orgs, len(orgs), nil
 
 }
 
@@ -362,6 +437,7 @@ func (s *OrganizationService) CreateOrganization(ctx context.Context, o *platfor
 	return nil
 }
 
+// UpdateOrganization updates the organization over HTTP.
 func (s *OrganizationService) UpdateOrganization(ctx context.Context, id platform.ID, upd platform.OrganizationUpdate) (*platform.Organization, error) {
 	u, err := newURL(s.Addr, organizationIDPath(id))
 	if err != nil {
@@ -401,6 +477,7 @@ func (s *OrganizationService) UpdateOrganization(ctx context.Context, id platfor
 	return &o, nil
 }
 
+// DeleteOrganization removes organization id over HTTP.
 func (s *OrganizationService) DeleteOrganization(ctx context.Context, id platform.ID) error {
 	u, err := newURL(s.Addr, organizationIDPath(id))
 	if err != nil {
@@ -418,9 +495,88 @@ func (s *OrganizationService) DeleteOrganization(ctx context.Context, id platfor
 	if err != nil {
 		return err
 	}
-	return CheckError(resp)
+
+	return CheckErrorStatus(http.StatusNoContent, resp)
 }
 
 func organizationIDPath(id platform.ID) string {
 	return path.Join(organizationPath, id.String())
+}
+
+// hanldeGetOrganizationLog retrieves a organization log by the organizations ID.
+func (h *OrgHandler) handleGetOrgLog(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	req, err := decodeGetOrganizationLogRequest(ctx, r)
+	if err != nil {
+		EncodeError(ctx, err, w)
+		return
+	}
+
+	log, _, err := h.OrganizationOperationLogService.GetOrganizationOperationLog(ctx, req.OrganizationID, req.opts)
+	if err != nil {
+		EncodeError(ctx, err, w)
+		return
+	}
+
+	if err := encodeResponse(ctx, w, http.StatusOK, newOrganizationLogResponse(req.OrganizationID, log)); err != nil {
+		EncodeError(ctx, err, w)
+		return
+	}
+}
+
+type getOrganizationLogRequest struct {
+	OrganizationID platform.ID
+	opts           platform.FindOptions
+}
+
+func decodeGetOrganizationLogRequest(ctx context.Context, r *http.Request) (*getOrganizationLogRequest, error) {
+	params := httprouter.ParamsFromContext(ctx)
+	id := params.ByName("id")
+	if id == "" {
+		return nil, kerrors.InvalidDataf("url missing id")
+	}
+
+	var i platform.ID
+	if err := i.DecodeFromString(id); err != nil {
+		return nil, err
+	}
+
+	opts := platform.DefaultOperationLogFindOptions
+	qp := r.URL.Query()
+	if v := qp.Get("desc"); v == "false" {
+		opts.Descending = false
+	}
+	if v := qp.Get("limit"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, err
+		}
+		opts.Limit = i
+	}
+	if v := qp.Get("offset"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, err
+		}
+		opts.Offset = i
+	}
+
+	return &getOrganizationLogRequest{
+		OrganizationID: i,
+		opts:           opts,
+	}, nil
+}
+
+func newOrganizationLogResponse(id platform.ID, es []*platform.OperationLogEntry) *operationLogResponse {
+	log := make([]*operationLogEntryResponse, 0, len(es))
+	for _, e := range es {
+		log = append(log, newOperationLogEntryResponse(e))
+	}
+	return &operationLogResponse{
+		Links: map[string]string{
+			"self": fmt.Sprintf("/api/v2/organizations/%s/log", id),
+		},
+		Log: log,
+	}
 }

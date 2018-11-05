@@ -11,13 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/query"
-	_ "github.com/EMCECS/influx/query/builtin"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/values"
-	"github.com/EMCECS/influx/task/backend"
-	"github.com/EMCECS/influx/task/backend/executor"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/execute"
+	"github.com/influxdata/flux/lang"
+	"github.com/influxdata/flux/values"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/query"
+	_ "github.com/influxdata/platform/query/builtin"
+	"github.com/influxdata/platform/task/backend"
+	"github.com/influxdata/platform/task/backend/executor"
+	platformtesting "github.com/influxdata/platform/testing"
 	"go.uber.org/zap"
 )
 
@@ -29,15 +32,15 @@ type fakeQueryService struct {
 
 var _ query.AsyncQueryService = (*fakeQueryService)(nil)
 
-func makeSpec(q string) *query.Spec {
-	qs, err := query.Compile(context.Background(), q, time.Unix(123, 0))
+func makeSpec(q string) *flux.Spec {
+	qs, err := flux.Compile(context.Background(), q, time.Unix(123, 0))
 	if err != nil {
 		panic(err)
 	}
 	return qs
 }
 
-func makeSpecString(q *query.Spec) string {
+func makeSpecString(q *flux.Spec) string {
 	b, err := json.Marshal(q)
 	if err != nil {
 		panic(err)
@@ -49,7 +52,7 @@ func newFakeQueryService() *fakeQueryService {
 	return &fakeQueryService{queries: make(map[string]*fakeQuery)}
 }
 
-func (s *fakeQueryService) Query(ctx context.Context, req *query.Request) (query.Query, error) {
+func (s *fakeQueryService) Query(ctx context.Context, req *query.Request) (flux.Query, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.queryErr != nil {
@@ -58,14 +61,14 @@ func (s *fakeQueryService) Query(ctx context.Context, req *query.Request) (query
 		return nil, err
 	}
 
-	sc, ok := req.Compiler.(query.SpecCompiler)
+	sc, ok := req.Compiler.(lang.SpecCompiler)
 	if !ok {
-		return nil, fmt.Errorf("fakeQueryService only supports the query.SpecCompiler, got %T", req.Compiler)
+		return nil, fmt.Errorf("fakeQueryService only supports the SpecCompiler, got %T", req.Compiler)
 	}
 
 	fq := &fakeQuery{
 		wait:  make(chan struct{}),
-		ready: make(chan map[string]query.Result),
+		ready: make(chan map[string]flux.Result),
 	}
 	s.queries[makeSpecString(sc.Spec)] = fq
 
@@ -79,7 +82,7 @@ func (s *fakeQueryService) SucceedQuery(script string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Unblock the query.
+	// Unblock the flux.
 	spec := makeSpecString(makeSpec(script))
 	close(s.queries[spec].wait)
 	delete(s.queries, spec)
@@ -90,7 +93,7 @@ func (s *fakeQueryService) FailQuery(script string, forced error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Unblock the query.
+	// Unblock the flux.
 	spec := makeSpecString(makeSpec(script))
 	s.queries[spec].forcedError = forced
 	close(s.queries[spec].wait)
@@ -125,19 +128,19 @@ func (s *fakeQueryService) WaitForQueryLive(t *testing.T, script string) {
 }
 
 type fakeQuery struct {
-	ready       chan map[string]query.Result
+	ready       chan map[string]flux.Result
 	wait        chan struct{} // Blocks Ready from returning.
 	forcedError error         // Value to return from Err() method.
 }
 
-var _ query.Query = (*fakeQuery)(nil)
+var _ flux.Query = (*fakeQuery)(nil)
 
-func (q *fakeQuery) Spec() *query.Spec                     { return nil }
-func (q *fakeQuery) Done()                                 {}
-func (q *fakeQuery) Cancel()                               {}
-func (q *fakeQuery) Err() error                            { return q.forcedError }
-func (q *fakeQuery) Statistics() query.Statistics          { return query.Statistics{} }
-func (q *fakeQuery) Ready() <-chan map[string]query.Result { return q.ready }
+func (q *fakeQuery) Spec() *flux.Spec                     { return nil }
+func (q *fakeQuery) Done()                                {}
+func (q *fakeQuery) Cancel()                              {}
+func (q *fakeQuery) Err() error                           { return q.forcedError }
+func (q *fakeQuery) Statistics() flux.Statistics          { return flux.Statistics{} }
+func (q *fakeQuery) Ready() <-chan map[string]flux.Result { return q.ready }
 
 // run is intended to be run on its own goroutine.
 // It blocks until q.wait is closed, then sends a fake result on the q.ready channel.
@@ -147,7 +150,7 @@ func (q *fakeQuery) run() {
 
 	if q.forcedError == nil {
 		res := newFakeResult()
-		q.ready <- map[string]query.Result{
+		q.ready <- map[string]flux.Result{
 			res.Name(): res,
 		}
 	} else {
@@ -155,21 +158,21 @@ func (q *fakeQuery) run() {
 	}
 }
 
-// fakeResult is a dumb implementation of query.Result that always returns the same values.
+// fakeResult is a dumb implementation of flux.Result that always returns the same values.
 type fakeResult struct {
 	name  string
-	table query.Table
+	table flux.Table
 }
 
-var _ query.Result = (*fakeResult)(nil)
+var _ flux.Result = (*fakeResult)(nil)
 
 func newFakeResult() *fakeResult {
-	meta := []query.ColMeta{{Label: "x", Type: query.TInt}}
-	vals := []values.Value{values.NewIntValue(int64(1))}
+	meta := []flux.ColMeta{{Label: "x", Type: flux.TInt}}
+	vals := []values.Value{values.NewInt(int64(1))}
 	gk := execute.NewGroupKey(meta, vals)
 	a := &execute.Allocator{Limit: math.MaxInt64}
 	b := execute.NewColListTableBuilder(gk, a)
-	i := b.AddCol(meta[0])
+	i, _ := b.AddCol(meta[0])
 	b.AppendInt(i, int64(1))
 	t, err := b.Table()
 	if err != nil {
@@ -178,15 +181,15 @@ func newFakeResult() *fakeResult {
 	return &fakeResult{name: "res", table: t}
 }
 
-func (r *fakeResult) Name() string                { return r.name }
-func (r *fakeResult) Tables() query.TableIterator { return tables{r.table} }
+func (r *fakeResult) Name() string               { return r.name }
+func (r *fakeResult) Tables() flux.TableIterator { return tables{r.table} }
 
 // tables makes a TableIterator out of a slice of Tables.
-type tables []query.Table
+type tables []flux.Table
 
-var _ query.TableIterator = tables(nil)
+var _ flux.TableIterator = tables(nil)
 
-func (ts tables) Do(f func(query.Table) error) error {
+func (ts tables) Do(f func(flux.Table) error) error {
 	for _, t := range ts {
 		if err := f(t); err != nil {
 			return err
@@ -248,13 +251,15 @@ const testScript = `option task = {
 		from(bucket: "one") |> toHTTP(url: "http://example.com")`
 
 func testExecutorQuerySuccess(t *testing.T, fn createSysFn) {
+	var orgID = platformtesting.MustIDBase16("aaaaaaaaaaaaaaaa")
+	var userID = platformtesting.MustIDBase16("baaaaaaaaaaaaaab")
 	sys := fn()
 	t.Run(sys.name+"/QuerySuccess", func(t *testing.T) {
-		tid, err := sys.st.CreateTask(context.Background(), platform.ID("org"), platform.ID("user"), testScript, 0)
+		tid, err := sys.st.CreateTask(context.Background(), backend.CreateTaskRequest{Org: orgID, User: userID, Script: testScript})
 		if err != nil {
 			t.Fatal(err)
 		}
-		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID{1}, Now: 123}
+		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID(1), Now: 123}
 		rp, err := sys.ex.Execute(context.Background(), qr)
 		if err != nil {
 			t.Fatal(err)
@@ -298,13 +303,15 @@ func testExecutorQuerySuccess(t *testing.T, fn createSysFn) {
 }
 
 func testExecutorQueryFailure(t *testing.T, fn createSysFn) {
+	var orgID = platformtesting.MustIDBase16("aaaaaaaaaaaaaaaa")
+	var userID = platformtesting.MustIDBase16("baaaaaaaaaaaaaab")
 	sys := fn()
 	t.Run(sys.name+"/QueryFail", func(t *testing.T) {
-		tid, err := sys.st.CreateTask(context.Background(), platform.ID("org"), platform.ID("user"), testScript, 0)
+		tid, err := sys.st.CreateTask(context.Background(), backend.CreateTaskRequest{Org: orgID, User: userID, Script: testScript})
 		if err != nil {
 			t.Fatal(err)
 		}
-		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID{1}, Now: 123}
+		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID(1), Now: 123}
 		rp, err := sys.ex.Execute(context.Background(), qr)
 		if err != nil {
 			t.Fatal(err)
@@ -324,13 +331,15 @@ func testExecutorQueryFailure(t *testing.T, fn createSysFn) {
 }
 
 func testExecutorPromiseCancel(t *testing.T, fn createSysFn) {
+	var orgID = platformtesting.MustIDBase16("aaaaaaaaaaaaaaaa")
+	var userID = platformtesting.MustIDBase16("baaaaaaaaaaaaaab")
 	sys := fn()
 	t.Run(sys.name+"/PromiseCancel", func(t *testing.T) {
-		tid, err := sys.st.CreateTask(context.Background(), platform.ID("org"), platform.ID("user"), testScript, 0)
+		tid, err := sys.st.CreateTask(context.Background(), backend.CreateTaskRequest{Org: orgID, User: userID, Script: testScript})
 		if err != nil {
 			t.Fatal(err)
 		}
-		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID{1}, Now: 123}
+		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID(1), Now: 123}
 		rp, err := sys.ex.Execute(context.Background(), qr)
 		if err != nil {
 			t.Fatal(err)
@@ -349,13 +358,15 @@ func testExecutorPromiseCancel(t *testing.T, fn createSysFn) {
 }
 
 func testExecutorServiceError(t *testing.T, fn createSysFn) {
+	var orgID = platformtesting.MustIDBase16("aaaaaaaaaaaaaaaa")
+	var userID = platformtesting.MustIDBase16("baaaaaaaaaaaaaab")
 	sys := fn()
 	t.Run(sys.name+"/ServiceError", func(t *testing.T) {
-		tid, err := sys.st.CreateTask(context.Background(), platform.ID("org"), platform.ID("user"), testScript, 0)
+		tid, err := sys.st.CreateTask(context.Background(), backend.CreateTaskRequest{Org: orgID, User: userID, Script: testScript})
 		if err != nil {
 			t.Fatal(err)
 		}
-		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID{1}, Now: 123}
+		qr := backend.QueuedRun{TaskID: tid, RunID: platform.ID(1), Now: 123}
 
 		var forced = errors.New("forced")
 		sys.svc.FailNextQuery(forced)

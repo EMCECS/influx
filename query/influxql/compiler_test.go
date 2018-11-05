@@ -3,10 +3,10 @@ package influxql_test
 import (
 	"testing"
 
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/influxql"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/platform/query/influxql"
 )
 
 func TestCompiler(t *testing.T) {
-	var _ query.Compiler = (*influxql.Compiler)(nil)
+	var _ flux.Compiler = (*influxql.Compiler)(nil)
 }

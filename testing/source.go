@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	defaultSourceID = "020f755c3c082000"
-	sourceOneID     = "020f755c3c082001"
-	sourceTwoID     = "020f755c3c082002"
-	sourceThreeID   = "020f755c3c082003"
+	defaultSourceID             = "020f755c3c082000"
+	defaultSourceOrganizationID = "50616e67652c206c"
+	sourceOneID                 = "020f755c3c082001"
+	sourceTwoID                 = "020f755c3c082002"
+	sourceOrgOneID              = "61726920617a696f"
 )
 
 var sourceCmpOptions = cmp.Options{
@@ -71,14 +72,16 @@ func CreateSource(
 			wants: wants{
 				sources: []*platform.Source{
 					{
-						Name:    "autogen",
-						Type:    "self",
-						ID:      idFromString(t, defaultSourceID),
-						Default: true,
+						Name:           "autogen",
+						Type:           "self",
+						ID:             MustIDBase16(defaultSourceID),
+						OrganizationID: MustIDBase16(defaultSourceOrganizationID),
+						Default:        true,
 					},
 					{
-						Name: "name1",
-						ID:   idFromString(t, sourceOneID),
+						Name:           "name1",
+						ID:             MustIDBase16(sourceOneID),
+						OrganizationID: MustIDBase16(sourceOneID),
 					},
 				},
 			},
@@ -138,18 +141,20 @@ func FindSourceByID(
 				IDGenerator: mock.NewIDGenerator(sourceOneID, t),
 				Sources: []*platform.Source{
 					{
-						Name: "name1",
-						ID:   idFromString(t, sourceOneID),
+						Name:           "name1",
+						ID:             MustIDBase16(sourceOneID),
+						OrganizationID: MustIDBase16(sourceOrgOneID),
 					},
 				},
 			},
 			args: args{
-				id: idFromString(t, sourceOneID),
+				id: MustIDBase16(sourceOneID),
 			},
 			wants: wants{
 				source: &platform.Source{
-					Name: "name1",
-					ID:   idFromString(t, sourceOneID),
+					Name:           "name1",
+					ID:             MustIDBase16(sourceOneID),
+					OrganizationID: MustIDBase16(sourceOrgOneID),
 				},
 			},
 		},
@@ -160,14 +165,15 @@ func FindSourceByID(
 				Sources:     []*platform.Source{},
 			},
 			args: args{
-				id: idFromString(t, defaultSourceID),
+				id: MustIDBase16(defaultSourceID),
 			},
 			wants: wants{
 				source: &platform.Source{
-					Name:    "autogen",
-					Type:    "self",
-					ID:      idFromString(t, defaultSourceID),
-					Default: true,
+					Name:           "autogen",
+					Type:           "self",
+					ID:             MustIDBase16(defaultSourceID),
+					OrganizationID: MustIDBase16(defaultSourceOrganizationID),
+					Default:        true,
 				},
 			},
 		},
@@ -221,12 +227,14 @@ func FindSources(
 				IDGenerator: mock.NewIDGenerator(sourceOneID, t),
 				Sources: []*platform.Source{
 					{
-						Name: "name1",
-						ID:   idFromString(t, sourceOneID),
+						Name:           "name1",
+						ID:             MustIDBase16(sourceOneID),
+						OrganizationID: MustIDBase16(sourceOrgOneID),
 					},
 					{
-						Name: "name2",
-						ID:   idFromString(t, sourceTwoID),
+						Name:           "name2",
+						ID:             MustIDBase16(sourceTwoID),
+						OrganizationID: MustIDBase16(sourceOrgOneID),
 					},
 				},
 			},
@@ -234,18 +242,21 @@ func FindSources(
 			wants: wants{
 				sources: []*platform.Source{
 					{
-						Name:    "autogen",
-						Type:    "self",
-						ID:      idFromString(t, defaultSourceID),
-						Default: true,
+						Name:           "autogen",
+						Type:           "self",
+						ID:             MustIDBase16(defaultSourceID),
+						OrganizationID: MustIDBase16(defaultSourceOrganizationID),
+						Default:        true,
 					},
 					{
-						Name: "name1",
-						ID:   idFromString(t, sourceOneID),
+						Name:           "name1",
+						ID:             MustIDBase16(sourceOneID),
+						OrganizationID: MustIDBase16(sourceOrgOneID),
 					},
 					{
-						Name: "name2",
-						ID:   idFromString(t, sourceTwoID),
+						Name:           "name2",
+						ID:             MustIDBase16(sourceTwoID),
+						OrganizationID: MustIDBase16(sourceOrgOneID),
 					},
 				},
 			},
@@ -300,21 +311,23 @@ func DeleteSource(
 				IDGenerator: mock.NewIDGenerator(sourceOneID, t),
 				Sources: []*platform.Source{
 					{
-						Name: "name1",
-						ID:   idFromString(t, sourceOneID),
+						Name:           "name1",
+						ID:             MustIDBase16(sourceOneID),
+						OrganizationID: MustIDBase16(sourceOrgOneID),
 					},
 				},
 			},
 			args: args{
-				id: idFromString(t, sourceOneID),
+				id: MustIDBase16(sourceOneID),
 			},
 			wants: wants{
 				sources: []*platform.Source{
 					{
-						Name:    "autogen",
-						Type:    "self",
-						ID:      idFromString(t, defaultSourceID),
-						Default: true,
+						Name:           "autogen",
+						Type:           "self",
+						ID:             MustIDBase16(defaultSourceID),
+						OrganizationID: MustIDBase16(defaultSourceOrganizationID),
+						Default:        true,
 					},
 				},
 			},
@@ -326,16 +339,17 @@ func DeleteSource(
 				Sources:     []*platform.Source{},
 			},
 			args: args{
-				id: idFromString(t, defaultSourceID),
+				id: MustIDBase16(defaultSourceID),
 			},
 			wants: wants{
 				err: fmt.Errorf("cannot delete autogen source"),
 				sources: []*platform.Source{
 					{
-						Name:    "autogen",
-						Type:    "self",
-						ID:      idFromString(t, defaultSourceID),
-						Default: true,
+						Name:           "autogen",
+						Type:           "self",
+						ID:             MustIDBase16(defaultSourceID),
+						OrganizationID: MustIDBase16(defaultSourceOrganizationID),
+						Default:        true,
 					},
 				},
 			},

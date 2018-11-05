@@ -11,8 +11,6 @@ import (
 	"github.com/EMCECS/influx"
 )
 
-var ErrRunNotFound error = errors.New("run not found")
-
 type runReaderWriter struct {
 	mu       sync.RWMutex
 	byTaskID map[string][]*platform.Run
@@ -23,14 +21,12 @@ func NewInMemRunReaderWriter() *runReaderWriter {
 	return &runReaderWriter{byRunID: map[string]*platform.Run{}, byTaskID: map[string][]*platform.Run{}}
 }
 
-func (r *runReaderWriter) UpdateRunState(ctx context.Context, task *StoreTask, runID platform.ID, when time.Time, status RunStatus) error {
+func (r *runReaderWriter) UpdateRunState(ctx context.Context, rlb RunLogBase, when time.Time, status RunStatus) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	timeSetter := func(r *platform.Run) {
 		whenStr := when.UTC().Format(time.RFC3339)
 		switch status {
-		case RunScheduled:
-			r.ScheduledFor = whenStr
 		case RunStarted:
 			r.StartedAt = whenStr
 		case RunFail, RunSuccess, RunCanceled:
@@ -38,13 +34,23 @@ func (r *runReaderWriter) UpdateRunState(ctx context.Context, task *StoreTask, r
 		}
 	}
 
-	existingRun, ok := r.byRunID[runID.String()]
+	ridStr := rlb.RunID.String()
+	existingRun, ok := r.byRunID[ridStr]
 	if !ok {
-		tid := append([]byte(nil), task.ID...)
-		run := &platform.Run{ID: runID, TaskID: tid, Status: status.String()}
+		sf := time.Unix(rlb.RunScheduledFor, 0).UTC()
+		run := &platform.Run{
+			ID:           rlb.RunID,
+			TaskID:       rlb.Task.ID,
+			Status:       status.String(),
+			ScheduledFor: sf.Format(time.RFC3339),
+		}
+		if rlb.RequestedAt != 0 {
+			run.RequestedAt = time.Unix(rlb.RequestedAt, 0).UTC().Format(time.RFC3339)
+		}
 		timeSetter(run)
-		r.byRunID[runID.String()] = run
-		r.byTaskID[task.ID.String()] = append(r.byTaskID[task.ID.String()], run)
+		r.byRunID[ridStr] = run
+		tidStr := rlb.Task.ID.String()
+		r.byTaskID[tidStr] = append(r.byTaskID[tidStr], run)
 		return nil
 	}
 
@@ -53,19 +59,20 @@ func (r *runReaderWriter) UpdateRunState(ctx context.Context, task *StoreTask, r
 	return nil
 }
 
-func (r *runReaderWriter) AddRunLog(ctx context.Context, task *StoreTask, runID platform.ID, when time.Time, log string) error {
+func (r *runReaderWriter) AddRunLog(ctx context.Context, rlb RunLogBase, when time.Time, log string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	log = fmt.Sprintf("%s: %s", when.Format(time.RFC3339), log)
-	existingRun, ok := r.byRunID[runID.String()]
+	ridStr := rlb.RunID.String()
+	existingRun, ok := r.byRunID[ridStr]
 	if !ok {
 		return ErrRunNotFound
 	}
+	sep := ""
 	if existingRun.Log != "" {
-		existingRun.Log = existingRun.Log + "\n"
+		sep = "\n"
 	}
-	existingRun.Log = platform.Log(string(existingRun.Log) + log)
+	existingRun.Log = platform.Log(string(existingRun.Log) + sep + log)
 	return nil
 }
 
@@ -116,10 +123,16 @@ func (r *runReaderWriter) ListRuns(ctx context.Context, runFilter platform.RunFi
 		beforeIndex = afterIndex + runFilter.Limit
 	}
 
-	return runs[afterIndex:beforeIndex], nil
+	runs = runs[afterIndex:beforeIndex]
+	for i := range runs {
+		// Copy every element, to avoid a data race if the original Run is modified in UpdateRunState or AddRunLog.
+		r := *runs[i]
+		runs[i] = &r
+	}
+	return runs, nil
 }
 
-func (r *runReaderWriter) FindRunByID(ctx context.Context, orgID, taskID, runID platform.ID) (*platform.Run, error) {
+func (r *runReaderWriter) FindRunByID(ctx context.Context, orgID, runID platform.ID) (*platform.Run, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -128,8 +141,7 @@ func (r *runReaderWriter) FindRunByID(ctx context.Context, orgID, taskID, runID 
 		return nil, ErrRunNotFound
 	}
 
-	var rtnRun platform.Run
-	rtnRun = *run
+	rtnRun := *run
 	return &rtnRun, nil
 }
 

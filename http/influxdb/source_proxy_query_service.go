@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/EMCECS/influx"
-	platformhttp "github.com/EMCECS/influx/http"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/csv"
-	"github.com/EMCECS/influx/query/influxql"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/csv"
+	"github.com/influxdata/flux/lang"
+	"github.com/influxdata/platform"
+	platformhttp "github.com/influxdata/platform/http"
+	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/influxql"
 )
 
 type SourceProxyQueryService struct {
@@ -27,7 +29,7 @@ func (s *SourceProxyQueryService) Query(ctx context.Context, w io.Writer, req *q
 	switch req.Request.Compiler.CompilerType() {
 	case influxql.CompilerType:
 		return s.influxQuery(ctx, w, req)
-	case query.FluxCompilerType:
+	case lang.FluxCompilerType:
 		return s.fluxQuery(ctx, w, req)
 	}
 
@@ -40,19 +42,19 @@ func (s *SourceProxyQueryService) fluxQuery(ctx context.Context, w io.Writer, re
 	}
 
 	request := struct {
-		Spec    *query.Spec   `json:"spec"`
-		Query   string        `json:"query"`
-		Type    string        `json:"type"`
-		Dialect query.Dialect `json:"dialect"`
+		Spec    *flux.Spec   `json:"spec"`
+		Query   string       `json:"query"`
+		Type    string       `json:"type"`
+		Dialect flux.Dialect `json:"dialect"`
 	}{}
 
 	switch c := req.Request.Compiler.(type) {
-	case query.FluxCompiler:
+	case lang.FluxCompiler:
 		request.Query = c.Query
-		request.Type = query.FluxCompilerType
-	case query.SpecCompiler:
+		request.Type = lang.FluxCompilerType
+	case lang.SpecCompiler:
 		request.Spec = c.Spec
-		request.Type = query.SpecCompilerType
+		request.Type = lang.SpecCompilerType
 	default:
 		return 0, fmt.Errorf("compiler type not supported: %s", c.CompilerType())
 	}
@@ -140,5 +142,16 @@ func (s *SourceProxyQueryService) influxQuery(ctx context.Context, w io.Writer, 
 	if err := platformhttp.CheckError(resp); err != nil {
 		return 0, err
 	}
-	return io.Copy(w, resp.Body)
+
+	res := &influxql.Response{}
+	if err := json.NewDecoder(resp.Body).Decode(res); err != nil {
+		return 0, err
+	}
+
+	csvDialect, ok := req.Dialect.(csv.Dialect)
+	if !ok {
+		return 0, fmt.Errorf("unsupported dialect %T", req.Dialect)
+	}
+
+	return csv.NewMultiResultEncoder(csvDialect.ResultEncoderConfig).Encode(w, influxql.NewResponseIterator(res))
 }

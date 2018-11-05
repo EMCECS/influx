@@ -6,30 +6,33 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/influxdata/flux/functions/inputs"
+	"github.com/influxdata/flux/functions/transformations"
+
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/ast"
+	"github.com/influxdata/flux/execute"
+
+	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/influxql"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/ast"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/semantic"
 )
 
-var selectorCreateFuncs = []func(config execute.SelectorConfig) query.OperationSpec{
-	func(config execute.SelectorConfig) query.OperationSpec {
-		return &functions.FirstOpSpec{SelectorConfig: config}
+var selectorCreateFuncs = []func(config execute.SelectorConfig) flux.OperationSpec{
+	func(config execute.SelectorConfig) flux.OperationSpec {
+		return &transformations.FirstOpSpec{SelectorConfig: config}
 	},
-	func(config execute.SelectorConfig) query.OperationSpec {
-		return &functions.LastOpSpec{SelectorConfig: config}
+	func(config execute.SelectorConfig) flux.OperationSpec {
+		return &transformations.LastOpSpec{SelectorConfig: config}
 	},
-	func(config execute.SelectorConfig) query.OperationSpec {
-		return &functions.MaxOpSpec{SelectorConfig: config}
+	func(config execute.SelectorConfig) flux.OperationSpec {
+		return &transformations.MaxOpSpec{SelectorConfig: config}
 	},
-	func(config execute.SelectorConfig) query.OperationSpec {
-		return &functions.MinOpSpec{SelectorConfig: config}
+	func(config execute.SelectorConfig) flux.OperationSpec {
+		return &transformations.MinOpSpec{SelectorConfig: config}
 	},
 }
 
-func SelectorTest(fn func(selector query.Operation) (string, *query.Spec)) Fixture {
+func SelectorTest(fn func(selector flux.Operation) (string, *flux.Spec)) Fixture {
 	_, file, line, _ := runtime.Caller(1)
 	fixture := &collection{
 		file: filepath.Base(file),
@@ -40,8 +43,8 @@ func SelectorTest(fn func(selector query.Operation) (string, *query.Spec)) Fixtu
 		spec := selectorSpecFn(execute.SelectorConfig{
 			Column: execute.DefaultValueColLabel,
 		})
-		op := query.Operation{
-			ID:   query.OperationID(fmt.Sprintf("%s0", spec.Kind())),
+		op := flux.Operation{
+			ID:   flux.OperationID(fmt.Sprintf("%s0", spec.Kind())),
 			Spec: spec,
 		}
 
@@ -52,21 +55,21 @@ func SelectorTest(fn func(selector query.Operation) (string, *query.Spec)) Fixtu
 
 func init() {
 	RegisterFixture(
-		SelectorTest(func(selector query.Operation) (stmt string, spec *query.Spec) {
+		SelectorTest(func(selector flux.Operation) (stmt string, spec *flux.Spec) {
 			return fmt.Sprintf(`SELECT %s(value) FROM db0..cpu`, selector.Spec.Kind()),
-				&query.Spec{
-					Operations: []*query.Operation{
+				&flux.Spec{
+					Operations: []*flux.Operation{
 						{
 							ID: "from0",
-							Spec: &functions.FromOpSpec{
-								BucketID: bucketID,
+							Spec: &inputs.FromOpSpec{
+								BucketID: bucketID.String(),
 							},
 						},
 						{
 							ID: "range0",
-							Spec: &functions.RangeOpSpec{
-								Start:    query.Time{Absolute: time.Unix(0, influxql.MinTime)},
-								Stop:     query.Time{Absolute: time.Unix(0, influxql.MaxTime)},
+							Spec: &transformations.RangeOpSpec{
+								Start:    flux.Time{Absolute: time.Unix(0, influxql.MinTime)},
+								Stop:     flux.Time{Absolute: time.Unix(0, influxql.MaxTime)},
 								TimeCol:  execute.DefaultTimeColLabel,
 								StartCol: execute.DefaultStartColLabel,
 								StopCol:  execute.DefaultStopColLabel,
@@ -74,35 +77,39 @@ func init() {
 						},
 						{
 							ID: "filter0",
-							Spec: &functions.FilterOpSpec{
+							Spec: &transformations.FilterOpSpec{
 								Fn: &semantic.FunctionExpression{
-									Params: []*semantic.FunctionParam{
-										{Key: &semantic.Identifier{Name: "r"}},
-									},
-									Body: &semantic.LogicalExpression{
-										Operator: ast.AndOperator,
-										Left: &semantic.BinaryExpression{
-											Operator: ast.EqualOperator,
-											Left: &semantic.MemberExpression{
-												Object: &semantic.IdentifierExpression{
-													Name: "r",
-												},
-												Property: "_measurement",
-											},
-											Right: &semantic.StringLiteral{
-												Value: "cpu",
+									Block: &semantic.FunctionBlock{
+										Parameters: &semantic.FunctionParameters{
+											List: []*semantic.FunctionParameter{
+												{Key: &semantic.Identifier{Name: "r"}},
 											},
 										},
-										Right: &semantic.BinaryExpression{
-											Operator: ast.EqualOperator,
-											Left: &semantic.MemberExpression{
-												Object: &semantic.IdentifierExpression{
-													Name: "r",
+										Body: &semantic.LogicalExpression{
+											Operator: ast.AndOperator,
+											Left: &semantic.BinaryExpression{
+												Operator: ast.EqualOperator,
+												Left: &semantic.MemberExpression{
+													Object: &semantic.IdentifierExpression{
+														Name: "r",
+													},
+													Property: "_measurement",
 												},
-												Property: "_field",
+												Right: &semantic.StringLiteral{
+													Value: "cpu",
+												},
 											},
-											Right: &semantic.StringLiteral{
-												Value: "value",
+											Right: &semantic.BinaryExpression{
+												Operator: ast.EqualOperator,
+												Left: &semantic.MemberExpression{
+													Object: &semantic.IdentifierExpression{
+														Name: "r",
+													},
+													Property: "_field",
+												},
+												Right: &semantic.StringLiteral{
+													Value: "value",
+												},
 											},
 										},
 									},
@@ -111,36 +118,40 @@ func init() {
 						},
 						{
 							ID: "group0",
-							Spec: &functions.GroupOpSpec{
+							Spec: &transformations.GroupOpSpec{
 								By: []string{"_measurement", "_start"},
 							},
 						},
 						&selector,
 						{
 							ID: "map0",
-							Spec: &functions.MapOpSpec{
+							Spec: &transformations.MapOpSpec{
 								Fn: &semantic.FunctionExpression{
-									Params: []*semantic.FunctionParam{{
-										Key: &semantic.Identifier{Name: "r"},
-									}},
-									Body: &semantic.ObjectExpression{
-										Properties: []*semantic.Property{
-											{
-												Key: &semantic.Identifier{Name: "_time"},
-												Value: &semantic.MemberExpression{
-													Object: &semantic.IdentifierExpression{
-														Name: "r",
+									Block: &semantic.FunctionBlock{
+										Parameters: &semantic.FunctionParameters{
+											List: []*semantic.FunctionParameter{{
+												Key: &semantic.Identifier{Name: "r"},
+											}},
+										},
+										Body: &semantic.ObjectExpression{
+											Properties: []*semantic.Property{
+												{
+													Key: &semantic.Identifier{Name: "_time"},
+													Value: &semantic.MemberExpression{
+														Object: &semantic.IdentifierExpression{
+															Name: "r",
+														},
+														Property: "_time",
 													},
-													Property: "_time",
 												},
-											},
-											{
-												Key: &semantic.Identifier{Name: string(selector.Spec.Kind())},
-												Value: &semantic.MemberExpression{
-													Object: &semantic.IdentifierExpression{
-														Name: "r",
+												{
+													Key: &semantic.Identifier{Name: string(selector.Spec.Kind())},
+													Value: &semantic.MemberExpression{
+														Object: &semantic.IdentifierExpression{
+															Name: "r",
+														},
+														Property: "_value",
 													},
-													Property: "_value",
 												},
 											},
 										},
@@ -151,12 +162,12 @@ func init() {
 						},
 						{
 							ID: "yield0",
-							Spec: &functions.YieldOpSpec{
+							Spec: &transformations.YieldOpSpec{
 								Name: "0",
 							},
 						},
 					},
-					Edges: []query.Edge{
+					Edges: []flux.Edge{
 						{Parent: "from0", Child: "range0"},
 						{Parent: "range0", Child: "filter0"},
 						{Parent: "filter0", Child: "group0"},

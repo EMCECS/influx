@@ -10,16 +10,17 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/mock"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/influxql"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/mock"
+	"github.com/influxdata/platform/query/influxql"
+	platformtesting "github.com/influxdata/platform/testing"
 )
 
 var dbrpMappingSvc = mock.NewDBRPMappingService()
-var organizationID = platform.ID("aaaa")
-var bucketID = platform.ID("bbbb")
-var altBucketID = platform.ID("cccc")
+var organizationID platform.ID
+var bucketID platform.ID
+var altBucketID platform.ID
 
 func init() {
 	mapping := platform.DBRPMapping{
@@ -66,13 +67,13 @@ type Fixture interface {
 
 type fixture struct {
 	stmt string
-	spec *query.Spec
+	spec *flux.Spec
 
 	file string
 	line int
 }
 
-func NewFixture(stmt string, spec *query.Spec) Fixture {
+func NewFixture(stmt string, spec *flux.Spec) Fixture {
 	_, file, line, _ := runtime.Caller(1)
 	return &fixture{
 		stmt: stmt,
@@ -83,6 +84,10 @@ func NewFixture(stmt string, spec *query.Spec) Fixture {
 }
 
 func (f *fixture) Run(t *testing.T) {
+	organizationID = platformtesting.MustIDBase16("aaaaaaaaaaaaaaaa")
+	bucketID = platformtesting.MustIDBase16("bbbbbbbbbbbbbbbb")
+	altBucketID = platformtesting.MustIDBase16("cccccccccccccccc")
+
 	t.Run(f.stmt, func(t *testing.T) {
 		if err := f.spec.Validate(); err != nil {
 			t.Fatalf("%s:%d: expected spec is not valid: %s", f.file, f.line, err)
@@ -91,7 +96,9 @@ func (f *fixture) Run(t *testing.T) {
 		transpiler := influxql.NewTranspilerWithConfig(
 			dbrpMappingSvc,
 			influxql.Config{
-				NowFn: Now,
+				DefaultDatabase: "db0",
+				Cluster:         "cluster",
+				NowFn:           Now,
 			},
 		)
 		spec, err := transpiler.Transpile(context.Background(), f.stmt)
@@ -121,13 +128,13 @@ func (f *fixture) Run(t *testing.T) {
 
 type collection struct {
 	stmts []string
-	specs []*query.Spec
+	specs []*flux.Spec
 
 	file string
 	line int
 }
 
-func (c *collection) Add(stmt string, spec *query.Spec) {
+func (c *collection) Add(stmt string, spec *flux.Spec) {
 	c.stmts = append(c.stmts, stmt)
 	c.specs = append(c.specs, spec)
 }

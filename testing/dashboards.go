@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/mock"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/mock"
 )
 
 const (
@@ -18,24 +19,72 @@ const (
 	dashThreeID = "020f755c3c082002"
 )
 
+func idPtr(id platform.ID) *platform.ID {
+	return &id
+}
+
 var dashboardCmpOptions = cmp.Options{
 	cmp.Comparer(func(x, y []byte) bool {
 		return bytes.Equal(x, y)
 	}),
-	cmp.Transformer("Sort", func(in []*platform.Dashboard) []*platform.Dashboard {
-		out := append([]*platform.Dashboard(nil), in...) // Copy input to avoid mutating it
-		sort.Slice(out, func(i, j int) bool {
-			return out[i].ID.String() > out[j].ID.String()
-		})
-		return out
-	}),
+	cmpopts.EquateEmpty(),
 }
 
 // DashboardFields will include the IDGenerator, and dashboards
 type DashboardFields struct {
 	IDGenerator platform.IDGenerator
+	NowFn       func() time.Time
 	Dashboards  []*platform.Dashboard
 	Views       []*platform.View
+}
+
+// DashboardService tests all the service functions.
+func DashboardService(
+	init func(DashboardFields, *testing.T) (platform.DashboardService, func()), t *testing.T,
+) {
+	tests := []struct {
+		name string
+		fn   func(init func(DashboardFields, *testing.T) (platform.DashboardService, func()),
+			t *testing.T)
+	}{
+		{
+			name: "FindDashboardByID",
+			fn:   FindDashboardByID,
+		},
+		{
+			name: "FindDashboards",
+			fn:   FindDashboards,
+		},
+		{
+			name: "CreateDashboard",
+			fn:   CreateDashboard,
+		},
+		{
+			name: "UpdateDashboard",
+			fn:   UpdateDashboard,
+		},
+		{
+			name: "AddDashboardCell",
+			fn:   AddDashboardCell,
+		},
+		{
+			name: "RemoveDashboardCell",
+			fn:   RemoveDashboardCell,
+		},
+		{
+			name: "UpdateDashboardCell",
+			fn:   UpdateDashboardCell,
+		},
+		{
+			name: "ReplaceDashboardCells",
+			fn:   ReplaceDashboardCells,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.fn(init, t)
+		})
+	}
 }
 
 // CreateDashboard testing
@@ -62,12 +111,52 @@ func CreateDashboard(
 			fields: DashboardFields{
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+					},
+				},
+			},
+			args: args{
+				dashboard: &platform.Dashboard{
+					ID:   MustIDBase16(dashTwoID),
+					Name: "dashboard2",
+				},
+			},
+			wants: wants{
+				dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+					},
+					{
+						ID:   MustIDBase16(dashTwoID),
+						Name: "dashboard2",
+						Meta: platform.DashboardMeta{
+							CreatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "create dashboard with missing id",
+			fields: DashboardFields{
+				IDGenerator: &mock.IDGenerator{
+					IDFn: func() platform.ID {
+						return MustIDBase16(dashTwoID)
+					},
+				},
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
+				Dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 					},
 				},
@@ -80,12 +169,16 @@ func CreateDashboard(
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 					},
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 						Name: "dashboard2",
+						Meta: platform.DashboardMeta{
+							CreatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
 					},
 				},
 			},
@@ -96,7 +189,7 @@ func CreateDashboard(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 			err := s.CreateDashboard(ctx, tt.args.dashboard)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
@@ -109,7 +202,7 @@ func CreateDashboard(
 			}
 			defer s.DeleteDashboard(ctx, tt.args.dashboard.ID)
 
-			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{})
+			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{}, platform.DefaultDashboardFindOptions)
 			if err != nil {
 				t.Fatalf("failed to retrieve dashboards: %v", err)
 			}
@@ -145,29 +238,90 @@ func AddDashboardCell(
 			fields: DashboardFields{
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
+					},
+				},
+				Views: []*platform.View{
+					{
+						ViewContents: platform.ViewContents{
+							ID: MustIDBase16(dashTwoID),
+						},
 					},
 				},
 			},
 			args: args{
-				dashboardID: idFromString(t, dashOneID),
-				cell:        &platform.Cell{},
+				dashboardID: MustIDBase16(dashOneID),
+				cell: &platform.Cell{
+					ID:     MustIDBase16(dashTwoID),
+					ViewID: MustIDBase16(dashTwoID),
+				},
 			},
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "add cell with no id",
+			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
+				IDGenerator: &mock.IDGenerator{
+					IDFn: func() platform.ID {
+						return MustIDBase16(dashTwoID)
+					},
+				},
+				Dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+					},
+				},
+				Views: []*platform.View{
+					{
+						ViewContents: platform.ViewContents{
+							ID: MustIDBase16(dashTwoID),
+						},
+					},
+				},
+			},
+			args: args{
+				dashboardID: MustIDBase16(dashOneID),
+				cell: &platform.Cell{
+					ViewID: MustIDBase16(dashTwoID),
+				},
+			},
+			wants: wants{
+				dashboards: []*platform.Dashboard{
+					{
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+						Name: "dashboard1",
+						Cells: []*platform.Cell{
+							{
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 						},
 					},
@@ -180,7 +334,7 @@ func AddDashboardCell(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 			err := s.AddDashboardCell(ctx, tt.args.dashboardID, tt.args.cell, platform.AddDashboardCellOptions{})
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
@@ -193,7 +347,7 @@ func AddDashboardCell(
 			}
 			defer s.DeleteDashboard(ctx, tt.args.dashboardID)
 
-			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{})
+			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{}, platform.DefaultDashboardFindOptions)
 			if err != nil {
 				t.Fatalf("failed to retrieve dashboards: %v", err)
 			}
@@ -228,21 +382,21 @@ func FindDashboardByID(
 			fields: DashboardFields{
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 					},
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 						Name: "dashboard2",
 					},
 				},
 			},
 			args: args{
-				id: idFromString(t, dashTwoID),
+				id: MustIDBase16(dashTwoID),
 			},
 			wants: wants{
 				dashboard: &platform.Dashboard{
-					ID:   idFromString(t, dashTwoID),
+					ID:   MustIDBase16(dashTwoID),
 					Name: "dashboard2",
 				},
 			},
@@ -253,7 +407,7 @@ func FindDashboardByID(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			dashboard, err := s.FindDashboardByID(ctx, tt.args.id)
 			if (err != nil) != (tt.wants.err != nil) {
@@ -279,8 +433,8 @@ func FindDashboards(
 	t *testing.T,
 ) {
 	type args struct {
-		ID   platform.ID
-		name string
+		IDs         []*platform.ID
+		findOptions platform.FindOptions
 	}
 
 	type wants struct {
@@ -298,24 +452,114 @@ func FindDashboards(
 			fields: DashboardFields{
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "abc",
 					},
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 						Name: "xyz",
 					},
 				},
 			},
-			args: args{},
+			args: args{
+				findOptions: platform.DefaultDashboardFindOptions,
+			},
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "abc",
 					},
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
+						Name: "xyz",
+					},
+				},
+			},
+		},
+		{
+			name: "find all dashboards sorted by created at",
+			fields: DashboardFields{
+				Dashboards: []*platform.Dashboard{
+					{
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							CreatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+						Name: "abc",
+					},
+					{
+						ID: MustIDBase16(dashTwoID),
+						Meta: platform.DashboardMeta{
+							CreatedAt: time.Date(2004, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+						Name: "xyz",
+					},
+				},
+			},
+			args: args{
+				findOptions: platform.FindOptions{
+					SortBy: "CreatedAt",
+				},
+			},
+			wants: wants{
+				dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashTwoID),
+						Name: "xyz",
+						Meta: platform.DashboardMeta{
+							CreatedAt: time.Date(2004, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+					},
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "abc",
+						Meta: platform.DashboardMeta{
+							CreatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "find all dashboards sorted by updated at",
+			fields: DashboardFields{
+				Dashboards: []*platform.Dashboard{
+					{
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+						Name: "abc",
+					},
+					{
+						ID: MustIDBase16(dashTwoID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2010, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+						Name: "xyz",
+					},
+				},
+			},
+			args: args{
+				findOptions: platform.FindOptions{
+					SortBy: "UpdatedAt",
+				},
+			},
+			wants: wants{
+				dashboards: []*platform.Dashboard{
+					{
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
+						Name: "abc",
+					},
+					{
+						ID: MustIDBase16(dashTwoID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2010, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
 						Name: "xyz",
 					},
 				},
@@ -326,22 +570,59 @@ func FindDashboards(
 			fields: DashboardFields{
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "abc",
 					},
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 						Name: "xyz",
 					},
 				},
 			},
 			args: args{
-				ID: idFromString(t, dashTwoID),
+				IDs: []*platform.ID{
+					idPtr(MustIDBase16(dashTwoID)),
+				},
+				findOptions: platform.DefaultDashboardFindOptions,
 			},
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
+						Name: "xyz",
+					},
+				},
+			},
+		},
+		{
+			name: "find multiple dashboards by id",
+			fields: DashboardFields{
+				Dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "abc",
+					},
+					{
+						ID:   MustIDBase16(dashTwoID),
+						Name: "xyz",
+					},
+				},
+			},
+			args: args{
+				IDs: []*platform.ID{
+					idPtr(MustIDBase16(dashOneID)),
+					idPtr(MustIDBase16(dashTwoID)),
+				},
+				findOptions: platform.DefaultDashboardFindOptions,
+			},
+			wants: wants{
+				dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "abc",
+					},
+					{
+						ID:   MustIDBase16(dashTwoID),
 						Name: "xyz",
 					},
 				},
@@ -353,14 +634,14 @@ func FindDashboards(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			filter := platform.DashboardFilter{}
-			if tt.args.ID != nil {
-				filter.ID = &tt.args.ID
+			if tt.args.IDs != nil {
+				filter.IDs = tt.args.IDs
 			}
 
-			dashboards, _, err := s.FindDashboards(ctx, filter)
+			dashboards, _, err := s.FindDashboards(ctx, filter, tt.args.findOptions)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected errors to be equal '%v' got '%v'", tt.wants.err, err)
 			}
@@ -403,22 +684,22 @@ func DeleteDashboard(
 				Dashboards: []*platform.Dashboard{
 					{
 						Name: "A",
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 					},
 					{
 						Name: "B",
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 					},
 				},
 			},
 			args: args{
-				ID: idFromString(t, dashOneID),
+				ID: MustIDBase16(dashOneID),
 			},
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
 						Name: "B",
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 					},
 				},
 			},
@@ -429,27 +710,27 @@ func DeleteDashboard(
 				Dashboards: []*platform.Dashboard{
 					{
 						Name: "A",
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 					},
 					{
 						Name: "B",
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 					},
 				},
 			},
 			args: args{
-				ID: idFromString(t, dashThreeID),
+				ID: MustIDBase16(dashThreeID),
 			},
 			wants: wants{
 				err: fmt.Errorf("dashboard not found"),
 				dashboards: []*platform.Dashboard{
 					{
 						Name: "A",
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 					},
 					{
 						Name: "B",
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 					},
 				},
 			},
@@ -460,7 +741,7 @@ func DeleteDashboard(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 			err := s.DeleteDashboard(ctx, tt.args.ID)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
@@ -473,7 +754,7 @@ func DeleteDashboard(
 			}
 
 			filter := platform.DashboardFilter{}
-			dashboards, _, err := s.FindDashboards(ctx, filter)
+			dashboards, _, err := s.FindDashboards(ctx, filter, platform.DefaultDashboardFindOptions)
 			if err != nil {
 				t.Fatalf("failed to retrieve dashboards: %v", err)
 			}
@@ -490,9 +771,9 @@ func UpdateDashboard(
 	t *testing.T,
 ) {
 	type args struct {
-		name      string
-		id        platform.ID
-		retention int
+		name        string
+		description string
+		id          platform.ID
 	}
 	type wants struct {
 		err       error
@@ -508,25 +789,90 @@ func UpdateDashboard(
 		{
 			name: "update name",
 			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 					},
 					{
-						ID:   idFromString(t, dashTwoID),
+						ID:   MustIDBase16(dashTwoID),
 						Name: "dashboard2",
 					},
 				},
 			},
 			args: args{
-				id:   idFromString(t, dashOneID),
+				id:   MustIDBase16(dashOneID),
 				name: "changed",
 			},
 			wants: wants{
 				dashboard: &platform.Dashboard{
-					ID:   idFromString(t, dashOneID),
+					ID: MustIDBase16(dashOneID),
+					Meta: platform.DashboardMeta{
+						UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+					},
 					Name: "changed",
+				},
+			},
+		},
+		{
+			name: "update description",
+			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
+				Dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+					},
+					{
+						ID:   MustIDBase16(dashTwoID),
+						Name: "dashboard2",
+					},
+				},
+			},
+			args: args{
+				id:          MustIDBase16(dashOneID),
+				description: "changed",
+			},
+			wants: wants{
+				dashboard: &platform.Dashboard{
+					ID:          MustIDBase16(dashOneID),
+					Name:        "dashboard1",
+					Description: "changed",
+					Meta: platform.DashboardMeta{
+						UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
+		{
+			name: "update description and name",
+			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
+				Dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+					},
+					{
+						ID:   MustIDBase16(dashTwoID),
+						Name: "dashboard2",
+					},
+				},
+			},
+			args: args{
+				id:          MustIDBase16(dashOneID),
+				description: "changed",
+				name:        "changed",
+			},
+			wants: wants{
+				dashboard: &platform.Dashboard{
+					ID:          MustIDBase16(dashOneID),
+					Name:        "changed",
+					Description: "changed",
+					Meta: platform.DashboardMeta{
+						UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+					},
 				},
 			},
 		},
@@ -536,11 +882,14 @@ func UpdateDashboard(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			upd := platform.DashboardUpdate{}
 			if tt.args.name != "" {
 				upd.Name = &tt.args.name
+			}
+			if tt.args.description != "" {
+				upd.Description = &tt.args.description
 			}
 
 			dashboard, err := s.UpdateDashboard(ctx, tt.args.id, upd)
@@ -584,22 +933,24 @@ func RemoveDashboardCell(
 		{
 			name: "basic remove cell",
 			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 							{
-								ID: idFromString(t, dashOneID),
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
 							},
 						},
 					},
@@ -607,23 +958,27 @@ func RemoveDashboardCell(
 				Views: []*platform.View{
 					{
 						ViewContents: platform.ViewContents{
-							ID: idFromString(t, dashTwoID),
+							ID: MustIDBase16(dashTwoID),
 						},
 					},
 				},
 			},
 			args: args{
-				dashboardID: idFromString(t, dashOneID),
-				cellID:      idFromString(t, dashTwoID),
+				dashboardID: MustIDBase16(dashOneID),
+				cellID:      MustIDBase16(dashTwoID),
 			},
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID: idFromString(t, dashOneID),
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
 							},
 						},
 					},
@@ -636,7 +991,7 @@ func RemoveDashboardCell(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 			err := s.RemoveDashboardCell(ctx, tt.args.dashboardID, tt.args.cellID)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
@@ -649,7 +1004,7 @@ func RemoveDashboardCell(
 			}
 			defer s.DeleteDashboard(ctx, tt.args.dashboardID)
 
-			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{})
+			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{}, platform.DefaultDashboardFindOptions)
 			if err != nil {
 				t.Fatalf("failed to retrieve dashboards: %v", err)
 			}
@@ -668,10 +1023,7 @@ func UpdateDashboardCell(
 	type args struct {
 		dashboardID platform.ID
 		cellID      platform.ID
-		x           int32
-		y           int32
-		w           int32
-		h           int32
+		cellUpdate  platform.CellUpdate
 	}
 	type wants struct {
 		err        error
@@ -685,49 +1037,111 @@ func UpdateDashboardCell(
 		wants  wants
 	}{
 		{
-			name: "basic remove cell",
+			name: "basic update cell",
 			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 							{
-								ID: idFromString(t, dashOneID),
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
 							},
 						},
 					},
 				},
 			},
 			args: args{
-				dashboardID: idFromString(t, dashOneID),
-				cellID:      idFromString(t, dashTwoID),
-				x:           10,
+				dashboardID: MustIDBase16(dashOneID),
+				cellID:      MustIDBase16(dashTwoID),
+				cellUpdate: platform.CellUpdate{
+					X:      func(i int32) *int32 { return &i }(int32(10)),
+					ViewID: MustIDBase16(dashTwoID),
+				},
 			},
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID: MustIDBase16(dashOneID),
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID: idFromString(t, dashTwoID),
-								X:  10,
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
+								X:      10,
 							},
 							{
-								ID: idFromString(t, dashOneID),
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
 							},
 						},
 					},
 				},
+			},
+		},
+		{
+			name: "invalid cell update",
+			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
+				IDGenerator: &mock.IDGenerator{
+					IDFn: func() platform.ID {
+						return MustIDBase16(dashTwoID)
+					},
+				},
+				Dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+						Cells: []*platform.Cell{
+							{
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
+							},
+							{
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				dashboardID: MustIDBase16(dashOneID),
+				cellID:      MustIDBase16(dashTwoID),
+				cellUpdate:  platform.CellUpdate{},
+			},
+			wants: wants{
+				dashboards: []*platform.Dashboard{
+					{
+						ID:   MustIDBase16(dashOneID),
+						Name: "dashboard1",
+						Cells: []*platform.Cell{
+							{
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
+							},
+							{
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
+							},
+						},
+					},
+				},
+				err: fmt.Errorf("must update at least one attribute"),
 			},
 		},
 	}
@@ -736,21 +1150,8 @@ func UpdateDashboardCell(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
-			upd := platform.CellUpdate{}
-			if tt.args.x != 0 {
-				upd.X = &tt.args.x
-			}
-			if tt.args.y != 0 {
-				upd.Y = &tt.args.y
-			}
-			if tt.args.w != 0 {
-				upd.W = &tt.args.w
-			}
-			if tt.args.h != 0 {
-				upd.H = &tt.args.h
-			}
-			_, err := s.UpdateDashboardCell(ctx, tt.args.dashboardID, tt.args.cellID, upd)
+			ctx := context.Background()
+			_, err := s.UpdateDashboardCell(ctx, tt.args.dashboardID, tt.args.cellID, tt.args.cellUpdate)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
 			}
@@ -762,7 +1163,7 @@ func UpdateDashboardCell(
 			}
 			defer s.DeleteDashboard(ctx, tt.args.dashboardID)
 
-			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{})
+			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{}, platform.DefaultDashboardFindOptions)
 			if err != nil {
 				t.Fatalf("failed to retrieve dashboards: %v", err)
 			}
@@ -796,51 +1197,52 @@ func ReplaceDashboardCells(
 		{
 			name: "basic replace cells",
 			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
 				Views: []*platform.View{
 					{
 						ViewContents: platform.ViewContents{
-							ID: idFromString(t, dashTwoID),
+							ID: MustIDBase16(dashTwoID),
 						},
 					},
 					{
 						ViewContents: platform.ViewContents{
-							ID: idFromString(t, dashOneID),
+							ID: MustIDBase16(dashOneID),
 						},
 					},
 				},
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 							{
-								ID:     idFromString(t, dashOneID),
-								ViewID: idFromString(t, dashOneID),
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
 							},
 						},
 					},
 				},
 			},
 			args: args{
-				dashboardID: idFromString(t, dashOneID),
+				dashboardID: MustIDBase16(dashOneID),
 				cells: []*platform.Cell{
 					{
-						ID:     idFromString(t, dashTwoID),
-						ViewID: idFromString(t, dashTwoID),
+						ID:     MustIDBase16(dashTwoID),
+						ViewID: MustIDBase16(dashTwoID),
 						X:      10,
 					},
 					{
-						ID:     idFromString(t, dashOneID),
-						ViewID: idFromString(t, dashOneID),
+						ID:     MustIDBase16(dashOneID),
+						ViewID: MustIDBase16(dashOneID),
 						Y:      11,
 					},
 				},
@@ -848,17 +1250,20 @@ func ReplaceDashboardCells(
 			wants: wants{
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
+						Meta: platform.DashboardMeta{
+							UpdatedAt: time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC),
+						},
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 								X:      10,
 							},
 							{
-								ID:     idFromString(t, dashOneID),
-								ViewID: idFromString(t, dashOneID),
+								ID:     MustIDBase16(dashOneID),
+								ViewID: MustIDBase16(dashOneID),
 								Y:      11,
 							},
 						},
@@ -869,42 +1274,43 @@ func ReplaceDashboardCells(
 		{
 			name: "try to add a cell that didn't previously exist",
 			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
 				Views: []*platform.View{
 					{
 						ViewContents: platform.ViewContents{
-							ID: idFromString(t, dashTwoID),
+							ID: MustIDBase16(dashTwoID),
 						},
 					},
 				},
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 						},
 					},
 				},
 			},
 			args: args{
-				dashboardID: idFromString(t, dashOneID),
+				dashboardID: MustIDBase16(dashOneID),
 				cells: []*platform.Cell{
 					{
-						ID:     idFromString(t, dashTwoID),
-						ViewID: idFromString(t, dashTwoID),
+						ID:     MustIDBase16(dashTwoID),
+						ViewID: MustIDBase16(dashTwoID),
 						X:      10,
 					},
 					{
-						ID:     idFromString(t, dashOneID),
-						ViewID: idFromString(t, dashOneID),
+						ID:     MustIDBase16(dashOneID),
+						ViewID: MustIDBase16(dashOneID),
 						Y:      11,
 					},
 				},
@@ -913,12 +1319,12 @@ func ReplaceDashboardCells(
 				err: fmt.Errorf("cannot replace cells that were not already present"),
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 						},
 					},
@@ -928,42 +1334,43 @@ func ReplaceDashboardCells(
 		{
 			name: "try to update a view during a replace",
 			fields: DashboardFields{
+				NowFn: func() time.Time { return time.Date(2009, time.November, 10, 24, 0, 0, 0, time.UTC) },
 				IDGenerator: &mock.IDGenerator{
 					IDFn: func() platform.ID {
-						return idFromString(t, dashTwoID)
+						return MustIDBase16(dashTwoID)
 					},
 				},
 				Views: []*platform.View{
 					{
 						ViewContents: platform.ViewContents{
-							ID: idFromString(t, dashTwoID),
+							ID: MustIDBase16(dashTwoID),
 						},
 					},
 					{
 						ViewContents: platform.ViewContents{
-							ID: idFromString(t, dashOneID),
+							ID: MustIDBase16(dashOneID),
 						},
 					},
 				},
 				Dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 						},
 					},
 				},
 			},
 			args: args{
-				dashboardID: idFromString(t, dashOneID),
+				dashboardID: MustIDBase16(dashOneID),
 				cells: []*platform.Cell{
 					{
-						ID:     idFromString(t, dashTwoID),
-						ViewID: idFromString(t, dashOneID),
+						ID:     MustIDBase16(dashTwoID),
+						ViewID: MustIDBase16(dashOneID),
 						X:      10,
 					},
 				},
@@ -972,12 +1379,12 @@ func ReplaceDashboardCells(
 				err: fmt.Errorf("cannot update view id in replace"),
 				dashboards: []*platform.Dashboard{
 					{
-						ID:   idFromString(t, dashOneID),
+						ID:   MustIDBase16(dashOneID),
 						Name: "dashboard1",
 						Cells: []*platform.Cell{
 							{
-								ID:     idFromString(t, dashTwoID),
-								ViewID: idFromString(t, dashTwoID),
+								ID:     MustIDBase16(dashTwoID),
+								ViewID: MustIDBase16(dashTwoID),
 							},
 						},
 					},
@@ -990,7 +1397,7 @@ func ReplaceDashboardCells(
 		t.Run(tt.name, func(t *testing.T) {
 			s, done := init(tt.fields, t)
 			defer done()
-			ctx := context.TODO()
+			ctx := context.Background()
 			err := s.ReplaceDashboardCells(ctx, tt.args.dashboardID, tt.args.cells)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
@@ -1003,7 +1410,7 @@ func ReplaceDashboardCells(
 			}
 			defer s.DeleteDashboard(ctx, tt.args.dashboardID)
 
-			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{})
+			dashboards, _, err := s.FindDashboards(ctx, platform.DashboardFilter{}, platform.DefaultDashboardFindOptions)
 			if err != nil {
 				t.Fatalf("failed to retrieve dashboards: %v", err)
 			}

@@ -21,16 +21,20 @@ var influxCmd = &cobra.Command{
 func init() {
 	influxCmd.AddCommand(authorizationCmd)
 	influxCmd.AddCommand(bucketCmd)
-	influxCmd.AddCommand(replCmd)
-	influxCmd.AddCommand(queryCmd)
 	influxCmd.AddCommand(organizationCmd)
+	influxCmd.AddCommand(queryCmd)
+	influxCmd.AddCommand(replCmd)
+	influxCmd.AddCommand(setupCmd)
+	influxCmd.AddCommand(taskCmd)
 	influxCmd.AddCommand(userCmd)
+	influxCmd.AddCommand(writeCmd)
 }
 
 // Flags contains all the CLI flag values for influx.
 type Flags struct {
 	token string
 	host  string
+	local bool
 }
 
 var flags Flags
@@ -49,6 +53,8 @@ func init() {
 	if h := viper.GetString("HOST"); h != "" {
 		flags.host = h
 	}
+
+	influxCmd.PersistentFlags().BoolVar(&flags.local, "local", false, "Run commands locally against the filesystem")
 }
 
 func influxF(cmd *cobra.Command, args []string) {

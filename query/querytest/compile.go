@@ -5,19 +5,21 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/semantic/semantictest"
-	"github.com/EMCECS/influx"
-	"fmt"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/functions/transformations"
+	"github.com/influxdata/flux/semantic/semantictest"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/query"
 )
 
-type NewQueryTestCase struct {
+type BucketAwareQueryTestCase struct {
 	Name             string
 	Raw              string
-	Want             *query.Spec
+	Want             *flux.Spec
 	WantErr          bool
 	WantReadBuckets  *[]platform.BucketFilter
 	WantWriteBuckets *[]platform.BucketFilter
@@ -25,19 +27,19 @@ type NewQueryTestCase struct {
 
 var opts = append(
 	semantictest.CmpOptions,
-	cmp.AllowUnexported(query.Spec{}),
-	cmp.AllowUnexported(functions.JoinOpSpec{}),
-	cmpopts.IgnoreUnexported(query.Spec{}),
-	cmpopts.IgnoreUnexported(functions.JoinOpSpec{}),
+	cmp.AllowUnexported(flux.Spec{}),
+	cmp.AllowUnexported(transformations.JoinOpSpec{}),
+	cmpopts.IgnoreUnexported(flux.Spec{}),
+	cmpopts.IgnoreUnexported(transformations.JoinOpSpec{}),
 )
 
-func NewQueryTestHelper(t *testing.T, tc NewQueryTestCase) {
+func BucketAwareQueryTestHelper(t *testing.T, tc BucketAwareQueryTestCase) {
 	t.Helper()
 
 	now := time.Now().UTC()
-	got, err := query.Compile(context.Background(), tc.Raw, now)
+	got, err := flux.Compile(context.Background(), tc.Raw, now)
 	if (err != nil) != tc.WantErr {
-		t.Errorf("query.NewQuery() error = %v, wantErr %v", err, tc.WantErr)
+		t.Errorf("error compiling spec error: %v, wantErr %v", err, tc.WantErr)
 		return
 	}
 	if tc.WantErr {
@@ -46,13 +48,16 @@ func NewQueryTestHelper(t *testing.T, tc NewQueryTestCase) {
 	if tc.Want != nil {
 		tc.Want.Now = now
 		if !cmp.Equal(tc.Want, got, opts...) {
-			t.Errorf("query.NewQuery() = -want/+got %s", cmp.Diff(tc.Want, got, opts...))
+			t.Errorf("unexpected specs -want/+got %s", cmp.Diff(tc.Want, got, opts...))
 		}
 	}
 
 	var gotReadBuckets, gotWriteBuckets []platform.BucketFilter
 	if tc.WantReadBuckets != nil || tc.WantWriteBuckets != nil {
-		gotReadBuckets, gotWriteBuckets, err = got.BucketsAccessed()
+		gotReadBuckets, gotWriteBuckets, err = query.BucketsAccessed(got)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if tc.WantReadBuckets != nil {

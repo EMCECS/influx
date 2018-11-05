@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/csv"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/csv"
+	"github.com/influxdata/platform/query"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
-	queryPath = "/v1/query"
+	queryPath = "/api/v2/querysvc"
 
 	statsTrailer = "Influx-Query-Statistics"
 )
@@ -27,7 +28,7 @@ type QueryHandler struct {
 	csvDialect csv.Dialect
 
 	QueryService     query.QueryService
-	CompilerMappings query.CompilerMappings
+	CompilerMappings flux.CompilerMappings
 }
 
 // NewQueryHandler returns a new instance of QueryHandler.
@@ -50,10 +51,9 @@ func (h *QueryHandler) handlePing(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handlePostQuery is the HTTP handler for the POST /v1/query route.
+// handlePostQuery is the HTTP handler for the POST /api/v2/query route.
 func (h *QueryHandler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	var req query.Request
 	req.WithCompilerMappings(h.CompilerMappings)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -71,7 +71,7 @@ func (h *QueryHandler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	defer results.Cancel()
 
 	// Setup headers
-	stats, hasStats := results.(query.Statisticser)
+	stats, hasStats := results.(flux.Statisticser)
 	if hasStats {
 		w.Header().Set("Trailer", statsTrailer)
 	}
@@ -125,7 +125,7 @@ type QueryService struct {
 	InsecureSkipVerify bool
 }
 
-func (s *QueryService) Query(ctx context.Context, req *query.Request) (query.ResultIterator, error) {
+func (s *QueryService) Query(ctx context.Context, req *query.Request) (flux.ResultIterator, error) {
 	u, err := newURL(s.Addr, queryPath)
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func (s *QueryService) Query(ctx context.Context, req *query.Request) (query.Res
 		return nil, err
 	}
 
-	var decoder query.MultiResultDecoder
+	var decoder flux.MultiResultDecoder
 	switch resp.Header.Get("Content-Type") {
 	case "text/csv":
 		fallthrough
@@ -170,11 +170,11 @@ func (s *QueryService) Query(ctx context.Context, req *query.Request) (query.Res
 	return statResults, nil
 }
 
-// statsResultIterator implements query.ResultIterator and query.Statisticser by reading the HTTP trailers.
+// statsResultIterator implements flux.ResultIterator and flux.Statisticser by reading the HTTP trailers.
 type statsResultIterator struct {
-	results    query.ResultIterator
+	results    flux.ResultIterator
 	resp       *http.Response
-	statisitcs query.Statistics
+	statisitcs flux.Statistics
 	err        error
 }
 
@@ -182,7 +182,7 @@ func (s *statsResultIterator) More() bool {
 	return s.results.More()
 }
 
-func (s *statsResultIterator) Next() query.Result {
+func (s *statsResultIterator) Next() flux.Result {
 	return s.results.Next()
 }
 
@@ -199,7 +199,7 @@ func (s *statsResultIterator) Err() error {
 	return s.err
 }
 
-func (s *statsResultIterator) Statistics() query.Statistics {
+func (s *statsResultIterator) Statistics() flux.Statistics {
 	return s.statisitcs
 }
 

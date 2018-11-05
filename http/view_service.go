@@ -15,20 +15,41 @@ import (
 type ViewHandler struct {
 	*httprouter.Router
 
-	ViewService platform.ViewService
+	ViewService                platform.ViewService
+	UserResourceMappingService platform.UserResourceMappingService
 }
 
+const (
+	viewsPath            = "/api/v2/views"
+	viewsIDPath          = "/api/v2/views/:id"
+	viewsIDMembersPath   = "/api/v2/views/:id/members"
+	viewsIDMembersIDPath = "/api/v2/views/:id/members/:userID"
+	viewsIDOwnersPath    = "/api/v2/views/:id/owners"
+	viewsIDOwnersIDPath  = "/api/v2/views/:id/owners:userID"
+)
+
 // NewViewHandler returns a new instance of ViewHandler.
-func NewViewHandler() *ViewHandler {
+func NewViewHandler(mappingService platform.UserResourceMappingService) *ViewHandler {
 	h := &ViewHandler{
-		Router: httprouter.New(),
+		Router:                     httprouter.New(),
+		UserResourceMappingService: mappingService,
 	}
 
-	h.HandlerFunc("POST", "/v2/views", h.handlePostViews)
-	h.HandlerFunc("GET", "/v2/views", h.handleGetViews)
-	h.HandlerFunc("GET", "/v2/views/:id", h.handleGetView)
-	h.HandlerFunc("DELETE", "/v2/views/:id", h.handleDeleteView)
-	h.HandlerFunc("PATCH", "/v2/views/:id", h.handlePatchView)
+	h.HandlerFunc("POST", viewsPath, h.handlePostViews)
+	h.HandlerFunc("GET", viewsPath, h.handleGetViews)
+
+	h.HandlerFunc("GET", viewsIDPath, h.handleGetView)
+	h.HandlerFunc("DELETE", viewsIDPath, h.handleDeleteView)
+	h.HandlerFunc("PATCH", viewsIDPath, h.handlePatchView)
+
+	h.HandlerFunc("POST", viewsIDMembersPath, newPostMemberHandler(h.UserResourceMappingService, platform.ViewResourceType, platform.Member))
+	h.HandlerFunc("GET", viewsIDMembersPath, newGetMembersHandler(h.UserResourceMappingService, platform.Member))
+	h.HandlerFunc("DELETE", viewsIDMembersIDPath, newDeleteMemberHandler(h.UserResourceMappingService, platform.Member))
+
+	h.HandlerFunc("POST", viewsIDOwnersPath, newPostMemberHandler(h.UserResourceMappingService, platform.ViewResourceType, platform.Owner))
+	h.HandlerFunc("GET", viewsIDOwnersPath, newGetMembersHandler(h.UserResourceMappingService, platform.Owner))
+	h.HandlerFunc("DELETE", viewsIDOwnersIDPath, newDeleteMemberHandler(h.UserResourceMappingService, platform.Owner))
+
 	return h
 }
 
@@ -61,7 +82,7 @@ func (r viewResponse) MarshalJSON() ([]byte, error) {
 func newViewResponse(c *platform.View) viewResponse {
 	return viewResponse{
 		Links: viewLinks{
-			Self: fmt.Sprintf("/v2/views/%s", c.ID),
+			Self: fmt.Sprintf("/api/v2/views/%s", c.ID),
 		},
 		View: *c,
 	}
@@ -95,7 +116,7 @@ type getViewsResponse struct {
 func newGetViewsResponse(views []*platform.View) getViewsResponse {
 	res := getViewsResponse{
 		Links: getViewsLinks{
-			Self: "/v2/views",
+			Self: "/api/v2/views",
 		},
 		Views: make([]viewResponse, 0, len(views)),
 	}
@@ -288,7 +309,7 @@ func decodePatchViewRequest(ctx context.Context, r *http.Request) (*patchViewReq
 
 // Valid validates that the view ID is non zero valued and update has expected values set.
 func (r *patchViewRequest) Valid() error {
-	if len(r.ViewID) == 0 {
+	if !r.ViewID.Valid() {
 		return fmt.Errorf("missing view ID")
 	}
 

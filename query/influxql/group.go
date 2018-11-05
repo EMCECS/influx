@@ -6,17 +6,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/execute"
+	"github.com/influxdata/flux/functions/transformations"
+	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/influxql"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/semantic"
 	"github.com/pkg/errors"
 )
 
 type groupInfo struct {
-	call *influxql.Call
-	refs []*influxql.VarRef
+	call     *influxql.Call
+	refs     []*influxql.VarRef
+	selector bool
 }
 
 type groupVisitor struct {
@@ -88,8 +89,9 @@ func identifyGroups(stmt *influxql.SelectStatement) ([]*groupInfo, error) {
 			call = v.calls[0].call
 		}
 		return []*groupInfo{{
-			call: call,
-			refs: v.refs,
+			call:     call,
+			refs:     v.refs,
+			selector: true, // Always a selector if we are here.
 		}}, nil
 	}
 
@@ -98,6 +100,11 @@ func identifyGroups(stmt *influxql.SelectStatement) ([]*groupInfo, error) {
 	groups := make([]*groupInfo, 0, len(v.calls))
 	for _, fn := range v.calls {
 		groups = append(groups, &groupInfo{call: fn.call})
+	}
+
+	// If there is exactly one group and that contains a selector, then mark it as so.
+	if len(groups) == 1 && influxql.IsSelector(groups[0].call) {
+		groups[0].selector = true
 	}
 	return groups, nil
 }
@@ -187,7 +194,7 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		return nil, errors.New("unimplemented: joining fields within a cursor")
 	}
 
-	cur := Join(t, cursors, []string{"_measurement"}, nil)
+	cur := Join(t, cursors, []string{"_measurement"})
 	if len(tags) > 0 {
 		cur = &tagsCursor{cursor: cur, tags: tags}
 	}
@@ -199,12 +206,16 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to evaluate condition")
 		}
-		id := t.op("filter", &functions.FilterOpSpec{
+		id := t.op("filter", &transformations.FilterOpSpec{
 			Fn: &semantic.FunctionExpression{
-				Params: []*semantic.FunctionParam{{
-					Key: &semantic.Identifier{Name: "r"},
-				}},
-				Body: expr,
+				Block: &semantic.FunctionBlock{
+					Parameters: &semantic.FunctionParameters{
+						List: []*semantic.FunctionParameter{{
+							Key: &semantic.Identifier{Name: "r"},
+						}},
+					},
+					Body: expr,
+				},
 			},
 		}, cur.ID())
 		cur = &opCursor{id: id, cursor: cur}
@@ -224,7 +235,7 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 
 	// If a function call is present, evaluate the function call.
 	if gr.call != nil {
-		c, err := createFunctionCursor(t, gr.call, cur)
+		c, err := createFunctionCursor(t, gr.call, cur, !gr.selector)
 		if err != nil {
 			return nil, err
 		}
@@ -234,9 +245,9 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		// so they stay in the same table and are joined in the correct order.
 		if interval > 0 {
 			cur = &groupCursor{
-				id: t.op("window", &functions.WindowOpSpec{
-					Every:         query.Duration(math.MaxInt64),
-					Period:        query.Duration(math.MaxInt64),
+				id: t.op("window", &transformations.WindowOpSpec{
+					Every:         flux.Duration(math.MaxInt64),
+					Period:        flux.Duration(math.MaxInt64),
 					TimeCol:       execute.DefaultTimeColLabel,
 					StartColLabel: execute.DefaultStartColLabel,
 					StopColLabel:  execute.DefaultStopColLabel,
@@ -246,7 +257,7 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 		}
 	} else {
 		// If we do not have a function, but we have a field option,
-		// return the appropriate error message if there is something wrong with the query.
+		// return the appropriate error message if there is something wrong with the flux.
 		if interval > 0 {
 			return nil, errors.New("GROUP BY requires at least one aggregate function")
 		}
@@ -265,7 +276,7 @@ func (gr *groupInfo) createCursor(t *transpilerState) (cursor, error) {
 
 type groupCursor struct {
 	cursor
-	id query.OperationID
+	id flux.OperationID
 }
 
 func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
@@ -354,21 +365,21 @@ func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
 	// Perform the grouping by the tags we found. There is always a group by because
 	// there is always something to group in influxql.
 	// TODO(jsternberg): A wildcard will skip this step.
-	id := t.op("group", &functions.GroupOpSpec{
+	id := t.op("group", &transformations.GroupOpSpec{
 		By: tags,
 	}, in.ID())
 
 	if windowEvery > 0 {
-		windowOp := &functions.WindowOpSpec{
-			Every:         query.Duration(windowEvery),
-			Period:        query.Duration(windowEvery),
+		windowOp := &transformations.WindowOpSpec{
+			Every:         flux.Duration(windowEvery),
+			Period:        flux.Duration(windowEvery),
 			TimeCol:       execute.DefaultTimeColLabel,
 			StartColLabel: execute.DefaultStartColLabel,
 			StopColLabel:  execute.DefaultStopColLabel,
 		}
 
 		if !windowStart.IsZero() {
-			windowOp.Start = query.Time{Absolute: windowStart}
+			windowOp.Start = flux.Time{Absolute: windowStart}
 		}
 
 		id = t.op("window", windowOp, id)
@@ -377,7 +388,7 @@ func (gr *groupInfo) group(t *transpilerState, in cursor) (cursor, error) {
 	return &groupCursor{id: id, cursor: in}, nil
 }
 
-func (c *groupCursor) ID() query.OperationID { return c.id }
+func (c *groupCursor) ID() flux.OperationID { return c.id }
 
 // tagsCursor is a pseudo-cursor that can be used to access tags within the cursor.
 type tagsCursor struct {

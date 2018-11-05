@@ -6,11 +6,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/ast"
-	"github.com/EMCECS/influx/query/functions"
-	"github.com/EMCECS/influx/query/semantic"
-	"github.com/EMCECS/influx/query/semantic/semantictest"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/ast"
+	"github.com/influxdata/flux/functions/inputs"
+	"github.com/influxdata/flux/functions/transformations"
+	"github.com/influxdata/flux/semantic"
+	"github.com/influxdata/flux/semantic/semantictest"
 )
 
 func TestParsePromQL(t *testing.T) {
@@ -353,26 +354,112 @@ func TestBuild(t *testing.T) {
 		name    string
 		promql  string
 		opts    []Option
-		want    *query.Spec
+		want    *flux.Spec
 		wantErr bool
 	}{
 		{
 			name:   "aggregate with count without a group by",
 			promql: `count(node_cpu{mode="user",cpu="cpu2"})`,
-			want: &query.Spec{
-				Operations: []*query.Operation{
+			want: &flux.Spec{
+				Operations: []*flux.Operation{
 					{
-						ID:   query.OperationID("from"),
-						Spec: &functions.FromOpSpec{Bucket: "prometheus"},
+						ID:   flux.OperationID("from"),
+						Spec: &inputs.FromOpSpec{Bucket: "prometheus"},
 					},
 					{
 						ID: "where",
-						Spec: &functions.FilterOpSpec{
+						Spec: &transformations.FilterOpSpec{
 							Fn: &semantic.FunctionExpression{
-								Params: []*semantic.FunctionParam{{Key: &semantic.Identifier{Name: "r"}}},
-								Body: &semantic.LogicalExpression{
-									Operator: ast.AndOperator,
-									Left: &semantic.LogicalExpression{
+								Block: &semantic.FunctionBlock{
+									Parameters: &semantic.FunctionParameters{
+										List: []*semantic.FunctionParameter{{Key: &semantic.Identifier{Name: "r"}}},
+									},
+									Body: &semantic.LogicalExpression{
+										Operator: ast.AndOperator,
+										Left: &semantic.LogicalExpression{
+											Operator: ast.AndOperator,
+											Left: &semantic.BinaryExpression{
+												Operator: ast.EqualOperator,
+												Left: &semantic.MemberExpression{
+													Object: &semantic.IdentifierExpression{
+														Name: "r",
+													},
+													Property: "_metric",
+												},
+												Right: &semantic.StringLiteral{
+													Value: "node_cpu",
+												},
+											},
+											Right: &semantic.BinaryExpression{
+												Operator: ast.EqualOperator,
+												Left: &semantic.MemberExpression{
+													Object: &semantic.IdentifierExpression{
+														Name: "r",
+													},
+													Property: "mode",
+												},
+												Right: &semantic.StringLiteral{
+													Value: "user",
+												},
+											},
+										},
+										Right: &semantic.BinaryExpression{
+											Operator: ast.EqualOperator,
+											Left: &semantic.MemberExpression{
+												Object: &semantic.IdentifierExpression{
+													Name: "r",
+												},
+												Property: "cpu",
+											},
+											Right: &semantic.StringLiteral{
+												Value: "cpu2",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						ID: flux.OperationID("count"), Spec: &transformations.CountOpSpec{},
+					},
+				},
+				Edges: []flux.Edge{
+					{
+						Parent: flux.OperationID("from"),
+						Child:  flux.OperationID("where"),
+					},
+					{
+						Parent: flux.OperationID("where"),
+						Child:  flux.OperationID("count"),
+					},
+				},
+			},
+		},
+		{
+			name:   "range of time but no aggregates",
+			promql: `node_cpu{mode="user"}[2m] offset 5m`,
+			want: &flux.Spec{
+				Operations: []*flux.Operation{
+					{
+						ID:   flux.OperationID("from"),
+						Spec: &inputs.FromOpSpec{Bucket: "prometheus"},
+					},
+					{
+						ID: flux.OperationID("range"),
+						Spec: &transformations.RangeOpSpec{
+							Start: flux.Time{Relative: -time.Minute * 7},
+						},
+					},
+					{
+						ID: "where",
+						Spec: &transformations.FilterOpSpec{
+							Fn: &semantic.FunctionExpression{
+								Block: &semantic.FunctionBlock{
+									Parameters: &semantic.FunctionParameters{
+										List: []*semantic.FunctionParameter{{Key: &semantic.Identifier{Name: "r"}}},
+									},
+									Body: &semantic.LogicalExpression{
 										Operator: ast.AndOperator,
 										Left: &semantic.BinaryExpression{
 											Operator: ast.EqualOperator,
@@ -399,97 +486,19 @@ func TestBuild(t *testing.T) {
 											},
 										},
 									},
-									Right: &semantic.BinaryExpression{
-										Operator: ast.EqualOperator,
-										Left: &semantic.MemberExpression{
-											Object: &semantic.IdentifierExpression{
-												Name: "r",
-											},
-											Property: "cpu",
-										},
-										Right: &semantic.StringLiteral{
-											Value: "cpu2",
-										},
-									},
-								},
-							},
-						},
-					},
-					{
-						ID: query.OperationID("count"), Spec: &functions.CountOpSpec{},
-					},
-				},
-				Edges: []query.Edge{
-					{
-						Parent: query.OperationID("from"),
-						Child:  query.OperationID("where"),
-					},
-					{
-						Parent: query.OperationID("where"),
-						Child:  query.OperationID("count"),
-					},
-				},
-			},
-		},
-		{
-			name:   "range of time but no aggregates",
-			promql: `node_cpu{mode="user"}[2m] offset 5m`,
-			want: &query.Spec{
-				Operations: []*query.Operation{
-					{
-						ID:   query.OperationID("from"),
-						Spec: &functions.FromOpSpec{Bucket: "prometheus"},
-					},
-					{
-						ID: query.OperationID("range"),
-						Spec: &functions.RangeOpSpec{
-							Start: query.Time{Relative: -time.Minute * 7},
-						},
-					},
-					{
-						ID: "where",
-						Spec: &functions.FilterOpSpec{
-							Fn: &semantic.FunctionExpression{
-								Params: []*semantic.FunctionParam{{Key: &semantic.Identifier{Name: "r"}}},
-								Body: &semantic.LogicalExpression{
-									Operator: ast.AndOperator,
-									Left: &semantic.BinaryExpression{
-										Operator: ast.EqualOperator,
-										Left: &semantic.MemberExpression{
-											Object: &semantic.IdentifierExpression{
-												Name: "r",
-											},
-											Property: "_metric",
-										},
-										Right: &semantic.StringLiteral{
-											Value: "node_cpu",
-										},
-									},
-									Right: &semantic.BinaryExpression{
-										Operator: ast.EqualOperator,
-										Left: &semantic.MemberExpression{
-											Object: &semantic.IdentifierExpression{
-												Name: "r",
-											},
-											Property: "mode",
-										},
-										Right: &semantic.StringLiteral{
-											Value: "user",
-										},
-									},
 								},
 							},
 						},
 					},
 				},
-				Edges: []query.Edge{
+				Edges: []flux.Edge{
 					{
-						Parent: query.OperationID("from"),
-						Child:  query.OperationID("range"),
+						Parent: flux.OperationID("from"),
+						Child:  flux.OperationID("range"),
 					},
 					{
-						Parent: query.OperationID("range"),
-						Child:  query.OperationID("where"),
+						Parent: flux.OperationID("range"),
+						Child:  flux.OperationID("where"),
 					},
 				},
 			},
@@ -498,47 +507,51 @@ func TestBuild(t *testing.T) {
 		{
 			name:   "sum over a range",
 			promql: `sum(node_cpu{_measurement="m0"}[170h])`,
-			want: &query.Spec{
-				Operations: []*query.Operation{
+			want: &flux.Spec{
+				Operations: []*flux.Operation{
 					{
-						ID:   query.OperationID("from"),
-						Spec: &functions.FromOpSpec{Bucket: "prometheus"},
+						ID:   flux.OperationID("from"),
+						Spec: &inputs.FromOpSpec{Bucket: "prometheus"},
 					},
 					{
-						ID: query.OperationID("range"),
-						Spec: &functions.RangeOpSpec{
-							Start: query.Time{Relative: -170 * time.Hour},
+						ID: flux.OperationID("range"),
+						Spec: &transformations.RangeOpSpec{
+							Start: flux.Time{Relative: -170 * time.Hour},
 						},
 					},
 					{
 						ID: "where",
-						Spec: &functions.FilterOpSpec{
+						Spec: &transformations.FilterOpSpec{
 							Fn: &semantic.FunctionExpression{
-								Params: []*semantic.FunctionParam{{Key: &semantic.Identifier{Name: "r"}}},
-								Body: &semantic.LogicalExpression{
-									Operator: ast.AndOperator,
-									Left: &semantic.BinaryExpression{
-										Operator: ast.EqualOperator,
-										Left: &semantic.MemberExpression{
-											Object: &semantic.IdentifierExpression{
-												Name: "r",
-											},
-											Property: "_metric",
-										},
-										Right: &semantic.StringLiteral{
-											Value: "node_cpu",
-										},
+								Block: &semantic.FunctionBlock{
+									Parameters: &semantic.FunctionParameters{
+										List: []*semantic.FunctionParameter{{Key: &semantic.Identifier{Name: "r"}}},
 									},
-									Right: &semantic.BinaryExpression{
-										Operator: ast.EqualOperator,
-										Left: &semantic.MemberExpression{
-											Object: &semantic.IdentifierExpression{
-												Name: "r",
+									Body: &semantic.LogicalExpression{
+										Operator: ast.AndOperator,
+										Left: &semantic.BinaryExpression{
+											Operator: ast.EqualOperator,
+											Left: &semantic.MemberExpression{
+												Object: &semantic.IdentifierExpression{
+													Name: "r",
+												},
+												Property: "_metric",
 											},
-											Property: "_measurement",
+											Right: &semantic.StringLiteral{
+												Value: "node_cpu",
+											},
 										},
-										Right: &semantic.StringLiteral{
-											Value: "m0",
+										Right: &semantic.BinaryExpression{
+											Operator: ast.EqualOperator,
+											Left: &semantic.MemberExpression{
+												Object: &semantic.IdentifierExpression{
+													Name: "r",
+												},
+												Property: "_measurement",
+											},
+											Right: &semantic.StringLiteral{
+												Value: "m0",
+											},
 										},
 									},
 								},
@@ -546,21 +559,21 @@ func TestBuild(t *testing.T) {
 						},
 					},
 					{
-						ID: query.OperationID("sum"), Spec: &functions.SumOpSpec{},
+						ID: flux.OperationID("sum"), Spec: &transformations.SumOpSpec{},
 					},
 				},
-				Edges: []query.Edge{
+				Edges: []flux.Edge{
 					{
-						Parent: query.OperationID("from"),
-						Child:  query.OperationID("range"),
+						Parent: flux.OperationID("from"),
+						Child:  flux.OperationID("range"),
 					},
 					{
-						Parent: query.OperationID("range"),
-						Child:  query.OperationID("where"),
+						Parent: flux.OperationID("range"),
+						Child:  flux.OperationID("where"),
 					},
 					{
-						Parent: query.OperationID("where"),
-						Child:  query.OperationID("sum"),
+						Parent: flux.OperationID("where"),
+						Child:  flux.OperationID("sum"),
 					},
 				},
 			},
@@ -574,7 +587,7 @@ func TestBuild(t *testing.T) {
 				t.Errorf("Build() %s error = %v, wantErr %v", tt.promql, err, tt.wantErr)
 				return
 			}
-			opts := append(semantictest.CmpOptions, []cmp.Option{cmp.AllowUnexported(query.Spec{}), cmpopts.IgnoreUnexported(query.Spec{})}...)
+			opts := append(semantictest.CmpOptions, []cmp.Option{cmp.AllowUnexported(flux.Spec{}), cmpopts.IgnoreUnexported(flux.Spec{})}...)
 			if !cmp.Equal(tt.want, got, opts...) {
 				t.Errorf("Build() = %s -want/+got\n%s", tt.promql, cmp.Diff(tt.want, got, opts...))
 			}

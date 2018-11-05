@@ -10,14 +10,15 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/EMCECS/influx"
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/influxql"
+	"github.com/influxdata/flux/lang"
+	"github.com/influxdata/platform"
+	"github.com/influxdata/platform/query"
+	"github.com/influxdata/platform/query/influxql"
 )
 
 type SourceProxyQueryService struct {
+	Addr               string
 	InsecureSkipVerify bool
-	URL                string
 	platform.SourceFields
 }
 
@@ -25,14 +26,14 @@ func (s *SourceProxyQueryService) Query(ctx context.Context, w io.Writer, req *q
 	switch req.Request.Compiler.CompilerType() {
 	case influxql.CompilerType:
 		return s.queryInfluxQL(ctx, w, req)
-	case query.FluxCompilerType:
+	case lang.FluxCompilerType:
 		return s.queryFlux(ctx, w, req)
 	}
 	return 0, fmt.Errorf("compiler type not supported")
 }
 
 func (s *SourceProxyQueryService) queryFlux(ctx context.Context, w io.Writer, req *query.ProxyRequest) (int64, error) {
-	u, err := newURL(s.URL, "/v1/query")
+	u, err := newURL(s.Addr, "/api/v2/query")
 	if err != nil {
 		return 0, err
 	}
@@ -68,7 +69,7 @@ func (s *SourceProxyQueryService) queryInfluxQL(ctx context.Context, w io.Writer
 		return 0, fmt.Errorf("compiler is not of type 'influxql'")
 	}
 
-	u, err := newURL(s.URL, "/query")
+	u, err := newURL(s.Addr, "/query")
 	if err != nil {
 		return 0, err
 	}
