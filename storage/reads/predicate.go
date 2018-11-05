@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/EMCECS/influx/storage/reads/datatypes"
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/influxdata/flux/ast"
 	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/storage/reads/datatypes"
-	"github.com/influxdata/platform/tsdb"
 	"github.com/pkg/errors"
 )
 

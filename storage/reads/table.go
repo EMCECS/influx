@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/tsdb/cursors"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/tsdb/cursors"
 )
 
 type table struct {

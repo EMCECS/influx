@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 var _ platform.TelegrafConfigStore = new(Service)

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/influxdata/platform/pkg/bytesutil"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/pkg/bytesutil"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // IndexFiles represents a layered set of index files.

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/EMCECS/influx"
 	"github.com/coreos/bbolt"
-	"github.com/influxdata/platform"
 )
 
 var (

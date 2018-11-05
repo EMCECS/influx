@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/influxdata/platform/bolt"
+	"github.com/EMCECS/influx/bolt"
 	"golang.org/x/crypto/bcrypt"
 )
 

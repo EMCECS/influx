@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/http"
+	"github.com/EMCECS/influx/query"
+	_ "github.com/EMCECS/influx/query/builtin"
 	"github.com/influxdata/flux/repl"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/http"
-	"github.com/influxdata/platform/query"
-	_ "github.com/influxdata/platform/query/builtin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

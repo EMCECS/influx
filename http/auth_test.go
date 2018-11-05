@@ -10,11 +10,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/influxdata/platform/inmem"
-	platformtesting "github.com/influxdata/platform/testing"
+	"github.com/EMCECS/influx/inmem"
+	platformtesting "github.com/EMCECS/influx/testing"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
 	"github.com/julienschmidt/httprouter"
 )
 

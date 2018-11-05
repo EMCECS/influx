@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/influxdata/platform/models"
+	"github.com/EMCECS/influx/models"
 )
 
 func TestTags_Merge(t *testing.T) {

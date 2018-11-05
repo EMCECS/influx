@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/influxdata/platform"
-	platcontext "github.com/influxdata/platform/context"
+	"github.com/EMCECS/influx"
+	platcontext "github.com/EMCECS/influx/context"
 	"github.com/julienschmidt/httprouter"
 	"go.uber.org/zap"
 )

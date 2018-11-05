@@ -3,11 +3,11 @@ package reads
 import (
 	"context"
 
+	"github.com/EMCECS/influx/models"
+	fstorage "github.com/EMCECS/influx/query/functions/inputs/storage"
+	"github.com/EMCECS/influx/storage/reads/datatypes"
+	"github.com/EMCECS/influx/tsdb/cursors"
 	"github.com/gogo/protobuf/proto"
-	"github.com/influxdata/platform/models"
-	fstorage "github.com/influxdata/platform/query/functions/inputs/storage"
-	"github.com/influxdata/platform/storage/reads/datatypes"
-	"github.com/influxdata/platform/tsdb/cursors"
 )
 
 type ResultSet interface {

@@ -3,7 +3,7 @@ package backend_test
 import (
 	"testing"
 
-	"github.com/influxdata/platform/task/backend"
+	"github.com/EMCECS/influx/task/backend"
 )
 
 func TestParseRetryAlreadyQueuedError(t *testing.T) {

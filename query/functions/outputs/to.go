@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/tsdb"
 	"time"
 
 	"sort"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/models"
+	istorage "github.com/EMCECS/influx/query/functions/inputs/storage"
+	"github.com/EMCECS/influx/storage"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/execute"
 	"github.com/influxdata/flux/functions/outputs"
@@ -16,10 +20,6 @@ import (
 	"github.com/influxdata/flux/plan"
 	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/flux/values"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/models"
-	istorage "github.com/influxdata/platform/query/functions/inputs/storage"
-	"github.com/influxdata/platform/storage"
 )
 
 // ToKind is the kind for the `to` flux function

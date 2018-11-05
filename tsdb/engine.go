@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/pkg/limiter"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/pkg/limiter"
 	"go.uber.org/zap"
 )
 

@@ -10,10 +10,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	platformtesting "github.com/influxdata/platform/testing"
 	"github.com/julienschmidt/httprouter"
 )
 

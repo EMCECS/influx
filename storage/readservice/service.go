@@ -3,17 +3,17 @@ package readservice
 import (
 	"context"
 
-	"github.com/influxdata/platform/query/functions/outputs"
+	"github.com/EMCECS/influx/query/functions/outputs"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions/inputs"
+	fstorage "github.com/EMCECS/influx/query/functions/inputs/storage"
+	"github.com/EMCECS/influx/storage"
+	"github.com/EMCECS/influx/storage/reads"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/control"
 	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions/inputs"
-	fstorage "github.com/influxdata/platform/query/functions/inputs/storage"
-	"github.com/influxdata/platform/storage"
-	"github.com/influxdata/platform/storage/reads"
 	"go.uber.org/zap"
 )
 

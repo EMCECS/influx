@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/influxdata/platform"
-	pcontext "github.com/influxdata/platform/context"
-	kerrors "github.com/influxdata/platform/kit/errors"
-	"github.com/influxdata/platform/task/backend"
+	"github.com/EMCECS/influx"
+	pcontext "github.com/EMCECS/influx/context"
+	kerrors "github.com/EMCECS/influx/kit/errors"
+	"github.com/EMCECS/influx/task/backend"
 	"github.com/julienschmidt/httprouter"
 	"go.uber.org/zap"
 )

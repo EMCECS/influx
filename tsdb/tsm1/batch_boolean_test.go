@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/EMCECS/influx/tsdb/tsm1"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb/tsm1"
 )
 
 func TestBooleanArrayEncodeAll_NoValues(t *testing.T) {

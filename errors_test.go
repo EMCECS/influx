@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 const EFailedToGetStorageHost = "failed to get the storage host"

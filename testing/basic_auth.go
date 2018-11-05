@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // BasicAuth test all the services for basic auth

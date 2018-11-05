@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/EMCECS/influx/pkg/slices"
+	"github.com/EMCECS/influx/tsdb/tsm1"
 	"github.com/golang/snappy"
-	"github.com/influxdata/platform/pkg/slices"
-	"github.com/influxdata/platform/tsdb/tsm1"
 )
 
 func TestWALWriter_WriteMulti_Single(t *testing.T) {

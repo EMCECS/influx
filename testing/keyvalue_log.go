@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
 )
 
 var keyValueLogCmpOptions = cmp.Options{

@@ -3,8 +3,8 @@ package query
 import (
 	"context"
 
+	"github.com/EMCECS/influx"
 	"github.com/influxdata/flux"
-	"github.com/influxdata/platform"
 	"github.com/pkg/errors"
 )
 

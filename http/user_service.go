@@ -9,9 +9,9 @@ import (
 	"path"
 	"strconv"
 
-	"github.com/influxdata/platform"
-	platcontext "github.com/influxdata/platform/context"
-	kerrors "github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	platcontext "github.com/EMCECS/influx/context"
+	kerrors "github.com/EMCECS/influx/kit/errors"
 	"github.com/julienschmidt/httprouter"
 )
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 func TestNames(t *testing.T) {

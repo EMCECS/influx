@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform"
-	platformhttp "github.com/influxdata/platform/http"
-	"github.com/influxdata/platform/mock"
+	"github.com/EMCECS/influx"
+	platformhttp "github.com/EMCECS/influx/http"
+	"github.com/EMCECS/influx/mock"
 )
 
 func TestBasicAuthHandler_handleSignin(t *testing.T) {

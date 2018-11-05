@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/influxdata/platform"
-	kerrors "github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	kerrors "github.com/EMCECS/influx/kit/errors"
 )
 
 // FindMacroByID implements the platform.MacroService interface

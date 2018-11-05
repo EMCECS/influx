@@ -4,7 +4,7 @@ import (
 	"container/list"
 	"sync"
 
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // TagValueSeriesIDCache is an LRU cache for series id sets associated with

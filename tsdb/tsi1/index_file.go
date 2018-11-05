@@ -9,9 +9,9 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/pkg/mmap"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/pkg/mmap"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // IndexFileVersion is the current TSI1 index file version.

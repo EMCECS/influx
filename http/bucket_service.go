@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/influxdata/platform"
-	errors "github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	errors "github.com/EMCECS/influx/kit/errors"
 	"github.com/julienschmidt/httprouter"
 )
 

@@ -1,6 +1,6 @@
 package outputs
 
-import "github.com/influxdata/platform/telegraf/plugins"
+import "github.com/EMCECS/influx/telegraf/plugins"
 
 type baseOutput int
 

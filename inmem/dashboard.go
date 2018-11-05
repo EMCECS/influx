@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 func (s *Service) loadDashboard(ctx context.Context, id platform.ID) (*platform.Dashboard, error) {

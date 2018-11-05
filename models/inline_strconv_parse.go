@@ -1,4 +1,4 @@
-package models // import "github.com/influxdata/platform/models"
+package models // import "github.com/EMCECS/influx/models"
 
 import (
 	"reflect"

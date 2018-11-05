@@ -7,10 +7,10 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/EMCECS/influx"
+	kerrors "github.com/EMCECS/influx/kit/errors"
+	"github.com/EMCECS/influx/mock"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	kerrors "github.com/influxdata/platform/kit/errors"
-	"github.com/influxdata/platform/mock"
 )
 
 const (

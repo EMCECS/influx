@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/models"
+	"github.com/EMCECS/influx/models"
 )
 
 var (

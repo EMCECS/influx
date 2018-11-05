@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
 )
 
 const (

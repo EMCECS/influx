@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/influxdata/platform/telegraf/plugins"
-	"github.com/influxdata/platform/telegraf/plugins/inputs"
-	"github.com/influxdata/platform/telegraf/plugins/outputs"
+	"github.com/EMCECS/influx/telegraf/plugins"
+	"github.com/EMCECS/influx/telegraf/plugins/inputs"
+	"github.com/EMCECS/influx/telegraf/plugins/outputs"
 )
 
 // TelegrafConfigStore represents a service for managing telegraf config data.

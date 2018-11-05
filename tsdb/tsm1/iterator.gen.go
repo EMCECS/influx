@@ -12,12 +12,12 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/influxdata/influxdb/pkg/metrics"
 	"github.com/influxdata/influxdb/pkg/tracing"
 	"github.com/influxdata/influxdb/pkg/tracing/fields"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/tsdb"
 	"go.uber.org/zap"
 )
 

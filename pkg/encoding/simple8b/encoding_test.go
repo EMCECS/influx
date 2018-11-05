@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/EMCECS/influx/pkg/encoding/simple8b"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/pkg/encoding/simple8b"
 )
 
 func Test_Encode_NoValues(t *testing.T) {

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	"github.com/EMCECS/influx/telegraf/plugins/inputs"
+	"github.com/EMCECS/influx/telegraf/plugins/outputs"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/influxdata/platform/telegraf/plugins/inputs"
-	"github.com/influxdata/platform/telegraf/plugins/outputs"
 )
 
 // TelegrafConfigFields includes prepopulated data for mapping tests.

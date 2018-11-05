@@ -5,13 +5,13 @@ import (
 	"errors"
 	"math"
 
+	"github.com/EMCECS/influx/models"
+	fstorage "github.com/EMCECS/influx/query/functions/inputs/storage"
+	"github.com/EMCECS/influx/storage"
+	"github.com/EMCECS/influx/storage/reads"
+	"github.com/EMCECS/influx/storage/reads/datatypes"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	"github.com/influxdata/platform/models"
-	fstorage "github.com/influxdata/platform/query/functions/inputs/storage"
-	"github.com/influxdata/platform/storage"
-	"github.com/influxdata/platform/storage/reads"
-	"github.com/influxdata/platform/storage/reads/datatypes"
 )
 
 type store struct {

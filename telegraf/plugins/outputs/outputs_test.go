@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/influxdata/platform/telegraf/plugins"
+	"github.com/EMCECS/influx/telegraf/plugins"
 )
 
 // local plugin

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"

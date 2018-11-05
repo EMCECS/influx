@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 func TestWriteService_Write(t *testing.T) {

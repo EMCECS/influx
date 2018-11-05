@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb"
 )
 
 func MustTempDir() (string, func()) {

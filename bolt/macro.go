@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/EMCECS/influx"
+	kerrors "github.com/EMCECS/influx/kit/errors"
 	bolt "github.com/coreos/bbolt"
-	"github.com/influxdata/platform"
-	kerrors "github.com/influxdata/platform/kit/errors"
 )
 
 var (

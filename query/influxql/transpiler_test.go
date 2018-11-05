@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/influxdata/platform/query/influxql"
-	"github.com/influxdata/platform/query/influxql/spectests"
-	platformtesting "github.com/influxdata/platform/testing"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	"github.com/EMCECS/influx/query/influxql"
+	"github.com/EMCECS/influx/query/influxql/spectests"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/pkg/errors"
 )
 

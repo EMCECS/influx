@@ -10,9 +10,9 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/pkg/binaryutil"
 	"github.com/cespare/xxhash"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/pkg/binaryutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

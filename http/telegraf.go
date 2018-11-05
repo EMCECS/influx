@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/influxdata/platform"
-	pctx "github.com/influxdata/platform/context"
-	"github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx"
+	pctx "github.com/EMCECS/influx/context"
+	"github.com/EMCECS/influx/kit/errors"
 	"github.com/julienschmidt/httprouter"
 	"go.uber.org/zap"
 )

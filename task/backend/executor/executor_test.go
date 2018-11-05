@@ -11,16 +11,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
+	_ "github.com/EMCECS/influx/query/builtin"
+	"github.com/EMCECS/influx/task/backend"
+	"github.com/EMCECS/influx/task/backend/executor"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/execute"
 	"github.com/influxdata/flux/lang"
 	"github.com/influxdata/flux/values"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
-	_ "github.com/influxdata/platform/query/builtin"
-	"github.com/influxdata/platform/task/backend"
-	"github.com/influxdata/platform/task/backend/executor"
-	platformtesting "github.com/influxdata/platform/testing"
 	"go.uber.org/zap"
 )
 

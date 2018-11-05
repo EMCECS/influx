@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/influxdata/platform/kit/errors"
+	"github.com/EMCECS/influx/kit/errors"
 )
 
 // ErrInvalidDuration is returned when parsing a malformatted duration.

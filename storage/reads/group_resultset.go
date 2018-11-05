@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/influxdata/platform/logger"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/storage/reads/datatypes"
-	"github.com/influxdata/platform/tsdb/cursors"
+	"github.com/EMCECS/influx/logger"
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/storage/reads/datatypes"
+	"github.com/EMCECS/influx/tsdb/cursors"
 	"github.com/opentracing/opentracing-go"
 	"go.uber.org/zap"
 )

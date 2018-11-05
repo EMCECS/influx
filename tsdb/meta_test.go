@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // Ensure tags can be marshaled into a byte slice.

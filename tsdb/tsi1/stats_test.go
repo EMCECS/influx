@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/EMCECS/influx/tsdb/tsi1"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb/tsi1"
 )
 
 func TestMeasurementCardinalityStats_WriteTo(t *testing.T) {

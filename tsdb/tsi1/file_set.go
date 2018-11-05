@@ -7,8 +7,8 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/tsdb"
 )
 
 // FileSet represents a collection of files.

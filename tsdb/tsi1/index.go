@@ -16,12 +16,12 @@ import (
 	"bytes"
 	"sort"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/pkg/slices"
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/cespare/xxhash"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/pkg/slices"
-	"github.com/influxdata/platform/tsdb"
 	"go.uber.org/zap"
 )
 

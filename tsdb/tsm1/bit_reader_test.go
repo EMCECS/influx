@@ -9,8 +9,8 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/EMCECS/influx/tsdb/tsm1"
 	"github.com/dgryski/go-bitstream"
-	"github.com/influxdata/platform/tsdb/tsm1"
 )
 
 func TestBitStreamEOF(t *testing.T) {

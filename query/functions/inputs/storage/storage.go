@@ -6,10 +6,10 @@ import (
 	"log"
 	"math"
 
+	"github.com/EMCECS/influx"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/execute"
 	"github.com/influxdata/flux/semantic"
-	"github.com/influxdata/platform"
 	"github.com/pkg/errors"
 )
 

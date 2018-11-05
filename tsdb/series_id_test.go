@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/influxdata/platform/models"
+	"github.com/EMCECS/influx/models"
 )
 
 func TestSeriesID(t *testing.T) {

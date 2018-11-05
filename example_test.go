@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/bolt"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/bolt"
 )
 
 func ExampleKeyValueLog() {

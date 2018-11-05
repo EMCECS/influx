@@ -3,12 +3,12 @@ package inputs
 import (
 	"fmt"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/functions/inputs/storage"
 	"github.com/influxdata/flux/execute"
 	"github.com/influxdata/flux/functions/inputs"
 	"github.com/influxdata/flux/plan"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/functions/inputs/storage"
 	"github.com/pkg/errors"
 )
 

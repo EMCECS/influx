@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/task/backend"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/task/backend"
-	platformtesting "github.com/influxdata/platform/testing"
 )
 
 type CreateRunStoreFunc func(*testing.T) (backend.LogWriter, backend.LogReader)

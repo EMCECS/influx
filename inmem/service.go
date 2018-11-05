@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/rand"
-	"github.com/influxdata/platform/snowflake"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/rand"
+	"github.com/EMCECS/influx/snowflake"
 )
 
 // Service implements various top level services.

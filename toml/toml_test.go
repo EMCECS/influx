@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	itoml "github.com/EMCECS/influx/toml"
 	"github.com/google/go-cmp/cmp"
-	itoml "github.com/influxdata/platform/toml"
 )
 
 func TestSize_UnmarshalText(t *testing.T) {

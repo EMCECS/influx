@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/tsdb"
-	"github.com/influxdata/platform/tsdb/tsi1"
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/tsdb"
+	"github.com/EMCECS/influx/tsdb/tsi1"
 )
 
 // Ensure a simple index file can be built and opened.

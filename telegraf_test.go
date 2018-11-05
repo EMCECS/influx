@@ -8,11 +8,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/influxdata/platform/telegraf/plugins"
-	"github.com/influxdata/platform/telegraf/plugins/outputs"
+	"github.com/EMCECS/influx/telegraf/plugins"
+	"github.com/EMCECS/influx/telegraf/plugins/outputs"
 
+	"github.com/EMCECS/influx/telegraf/plugins/inputs"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/telegraf/plugins/inputs"
 )
 
 type unsupportedPluginType struct {

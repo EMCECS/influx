@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/EMCECS/influx"
 	bolt "github.com/coreos/bbolt"
-	"github.com/influxdata/platform"
 )
 
 var onboardingBucket = []byte("onboardingv1")

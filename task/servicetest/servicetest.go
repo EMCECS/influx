@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/snowflake"
+	"github.com/EMCECS/influx/task"
+	"github.com/EMCECS/influx/task/backend"
+	"github.com/EMCECS/influx/task/options"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/snowflake"
-	"github.com/influxdata/platform/task"
-	"github.com/influxdata/platform/task/backend"
-	"github.com/influxdata/platform/task/options"
 )
 
 func init() {

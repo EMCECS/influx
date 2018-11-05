@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/EMCECS/influx/tsdb"
+	"github.com/EMCECS/influx/tsdb/tsm1"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb"
-	"github.com/influxdata/platform/tsdb/tsm1"
 )
 
 func TestFileStore_Array(t *testing.T) {

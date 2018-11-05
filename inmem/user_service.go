@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 func (s *Service) loadUser(id platform.ID) (*platform.User, error) {

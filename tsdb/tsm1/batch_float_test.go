@@ -9,8 +9,8 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/EMCECS/influx/tsdb/tsm1"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb/tsm1"
 )
 
 var fullBlockFloat64Ones []float64

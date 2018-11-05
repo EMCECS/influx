@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/snowflake"
-	"github.com/influxdata/platform/task/options"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/snowflake"
+	"github.com/EMCECS/influx/task/options"
 )
 
 var _ Store = (*inmem)(nil)

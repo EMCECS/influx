@@ -3,8 +3,8 @@ package query
 import (
 	"time"
 
+	"github.com/EMCECS/influx"
 	"github.com/influxdata/flux"
-	"github.com/influxdata/platform"
 )
 
 // Logger persists metadata about executed queries.

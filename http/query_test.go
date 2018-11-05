@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	"github.com/EMCECS/influx/query"
+	_ "github.com/EMCECS/influx/query/builtin"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/ast"
 	"github.com/influxdata/flux/csv"
 	"github.com/influxdata/flux/lang"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/influxdata/platform/query"
-	_ "github.com/influxdata/platform/query/builtin"
 )
 
 func TestQueryRequest_WithDefaults(t *testing.T) {

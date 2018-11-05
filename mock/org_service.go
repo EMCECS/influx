@@ -3,7 +3,7 @@ package mock
 import (
 	"context"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 var _ platform.OrganizationService = &OrganizationService{}

@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/EMCECS/influx"
+	platformcontext "github.com/EMCECS/influx/context"
 	bolt "github.com/coreos/bbolt"
-	"github.com/influxdata/platform"
-	platformcontext "github.com/influxdata/platform/context"
 )
 
 var (

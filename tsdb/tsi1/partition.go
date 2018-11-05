@@ -15,10 +15,10 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/EMCECS/influx/logger"
+	"github.com/EMCECS/influx/pkg/bytesutil"
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/logger"
-	"github.com/influxdata/platform/pkg/bytesutil"
-	"github.com/influxdata/platform/tsdb"
 	"go.uber.org/zap"
 )
 

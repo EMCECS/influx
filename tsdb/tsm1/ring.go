@@ -5,8 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/EMCECS/influx/pkg/bytesutil"
 	"github.com/cespare/xxhash"
-	"github.com/influxdata/platform/pkg/bytesutil"
 )
 
 // partitions is the number of partitions we used in the ring's continuum. It

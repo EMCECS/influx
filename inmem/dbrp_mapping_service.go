@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 var (

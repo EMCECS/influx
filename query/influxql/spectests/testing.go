@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/mock"
+	"github.com/EMCECS/influx/query/influxql"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/influxdata/flux"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/mock"
-	"github.com/influxdata/platform/query/influxql"
-	platformtesting "github.com/influxdata/platform/testing"
 )
 
 var dbrpMappingSvc = mock.NewDBRPMappingService()

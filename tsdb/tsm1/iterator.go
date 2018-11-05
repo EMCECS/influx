@@ -3,8 +3,8 @@ package tsm1
 import (
 	"fmt"
 
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/influxdata/influxdb/query"
-	"github.com/influxdata/platform/tsdb"
 	"go.uber.org/zap"
 )
 

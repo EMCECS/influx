@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/http"
-	"github.com/influxdata/platform/kit/signals"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/write"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/http"
+	"github.com/EMCECS/influx/kit/signals"
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/write"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

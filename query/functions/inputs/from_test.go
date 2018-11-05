@@ -7,11 +7,11 @@ import (
 	"github.com/influxdata/flux/functions/inputs"
 	"github.com/influxdata/flux/functions/transformations"
 
+	"github.com/EMCECS/influx"
+	pquerytest "github.com/EMCECS/influx/query/querytest"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/execute"
 	"github.com/influxdata/flux/querytest"
-	"github.com/influxdata/platform"
-	pquerytest "github.com/influxdata/platform/query/querytest"
 )
 
 func TestFrom_NewQuery(t *testing.T) {

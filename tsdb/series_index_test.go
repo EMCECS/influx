@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/tsdb"
 )
 
 func toTypedSeriesID(id uint64) tsdb.SeriesIDTyped {

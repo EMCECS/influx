@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/influxdata/influxdb/pkg/metrics"
 	"github.com/influxdata/influxdb/query"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/tsdb"
 )
 
 type arrayCursorIterator struct {

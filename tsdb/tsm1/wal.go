@@ -17,10 +17,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/pkg/limiter"
+	"github.com/EMCECS/influx/pkg/pool"
 	"github.com/golang/snappy"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/pkg/limiter"
-	"github.com/influxdata/platform/pkg/pool"
 	"go.uber.org/zap"
 )
 

@@ -9,8 +9,8 @@ package reads
 import (
 	"errors"
 
-	"github.com/influxdata/platform/tsdb/cursors"
-	"github.com/influxdata/platform/tsdb/defaults"
+	"github.com/EMCECS/influx/tsdb/cursors"
+	"github.com/EMCECS/influx/tsdb/defaults"
 )
 
 // ********************

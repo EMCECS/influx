@@ -13,9 +13,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/influxdata/platform/pkg/bytesutil"
-	"github.com/influxdata/platform/pkg/file"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/pkg/bytesutil"
+	"github.com/EMCECS/influx/pkg/file"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // ErrFileInUse is returned when attempting to remove or close a TSM file that is still being used.

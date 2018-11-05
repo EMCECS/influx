@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/EMCECS/influx"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/ast"
 	"github.com/influxdata/flux/execute"
@@ -15,7 +16,6 @@ import (
 	"github.com/influxdata/flux/functions/transformations"
 	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform"
 )
 
 // Transpiler converts InfluxQL queries into a query spec.

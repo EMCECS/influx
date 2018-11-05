@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/task/backend"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/task/backend"
 	"go.uber.org/zap"
 )
 

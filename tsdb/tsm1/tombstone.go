@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/influxdata/platform/pkg/file"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/pkg/file"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 const (

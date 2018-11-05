@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/influxdata/platform/pkg/encoding/simple8b"
+	"github.com/EMCECS/influx/pkg/encoding/simple8b"
 )
 
 // IntegerArrayEncodeAll encodes src into b, returning b and any error encountered.

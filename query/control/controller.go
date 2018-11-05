@@ -3,9 +3,9 @@ package control
 import (
 	"context"
 
+	"github.com/EMCECS/influx/query"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/control"
-	"github.com/influxdata/platform/query"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

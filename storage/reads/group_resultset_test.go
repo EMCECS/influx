@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/storage/reads/datatypes"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/storage/reads/datatypes"
 )
 
 func TestGroupGroupResultSetSorting(t *testing.T) {

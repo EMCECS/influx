@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 	"github.com/julienschmidt/httprouter"
 	"go.uber.org/zap"
 )

@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/cmd/influx/internal"
+	"github.com/EMCECS/influx/http"
 	"github.com/influxdata/flux/repl"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/cmd/influx/internal"
-	"github.com/influxdata/platform/http"
 	"github.com/spf13/cobra"
 )
 

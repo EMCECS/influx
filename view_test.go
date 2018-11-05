@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/EMCECS/influx"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	platformtesting "github.com/influxdata/platform/testing"
 )
 
 func TestView_MarshalJSON(t *testing.T) {

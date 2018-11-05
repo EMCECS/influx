@@ -4,8 +4,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/EMCECS/influx/tsdb"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb"
 )
 
 func TestNewMergeKeyIterator(t *testing.T) {

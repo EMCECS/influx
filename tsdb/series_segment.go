@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/influxdata/platform/pkg/mmap"
+	"github.com/EMCECS/influx/pkg/mmap"
 )
 
 const (

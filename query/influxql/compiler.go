@@ -3,8 +3,8 @@ package influxql
 import (
 	"context"
 
+	"github.com/EMCECS/influx"
 	"github.com/influxdata/flux"
-	"github.com/influxdata/platform"
 )
 
 const CompilerType = "influxql"

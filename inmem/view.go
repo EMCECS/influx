@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 func (s *Service) loadView(ctx context.Context, id platform.ID) (*platform.View, error) {

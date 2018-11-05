@@ -22,8 +22,8 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/EMCECS/influx/pkg/estimator"
 	"github.com/cespare/xxhash"
-	"github.com/influxdata/platform/pkg/estimator"
 )
 
 // Current version of HLL implementation.

@@ -10,13 +10,13 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/EMCECS/influx"
+	kerrors "github.com/EMCECS/influx/kit/errors"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/query/influxql"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/csv"
 	"github.com/influxdata/flux/lang"
-	"github.com/influxdata/platform"
-	kerrors "github.com/influxdata/platform/kit/errors"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/query/influxql"
 	"github.com/julienschmidt/httprouter"
 )
 

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/csv"
 	"github.com/influxdata/flux/lang"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
 )
 
 func TestFluxService_Query(t *testing.T) {

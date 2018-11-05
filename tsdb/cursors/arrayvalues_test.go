@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/EMCECS/influx/tsdb/cursors"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform/tsdb/cursors"
 )
 
 func makeBooleanArray(v ...interface{}) *cursors.BooleanArray {

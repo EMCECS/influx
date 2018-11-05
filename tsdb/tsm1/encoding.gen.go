@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // Values represents a slice of  values.

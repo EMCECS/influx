@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 func TestLegacyOpen(t *testing.T) {

@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/EMCECS/influx/toml"
+	"github.com/EMCECS/influx/tsdb/defaults"
 	"github.com/influxdata/influxdb/monitor/diagnostics"
 	"github.com/influxdata/influxdb/query"
-	"github.com/influxdata/platform/toml"
-	"github.com/influxdata/platform/tsdb/defaults"
 )
 
 // TODO(jeff): port things to use the defaults package

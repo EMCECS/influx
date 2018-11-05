@@ -1,7 +1,7 @@
 package testing
 
 import (
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // MustIDBase16 is an helper to ensure a correct ID is built during testing.

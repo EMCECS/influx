@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 // WriteService writes data read from the reader.

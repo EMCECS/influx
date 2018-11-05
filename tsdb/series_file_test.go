@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/influxdata/platform/logger"
-	"github.com/influxdata/platform/models"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/logger"
+	"github.com/EMCECS/influx/models"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 func TestParseSeriesKeyInto(t *testing.T) {

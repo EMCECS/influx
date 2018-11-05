@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/influxdata/platform/tsdb/tsm1"
+	"github.com/EMCECS/influx/tsdb/tsm1"
 )
 
 func TestCacheCheckConcurrentReadsAreSafe(t *testing.T) {

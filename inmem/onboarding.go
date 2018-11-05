@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/influxdata/platform"
+	"github.com/EMCECS/influx"
 )
 
 const onboardingKey = "onboarding_key"

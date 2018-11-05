@@ -5,10 +5,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/inmem"
-	"github.com/influxdata/platform/mock"
-	platformtesting "github.com/influxdata/platform/testing"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/inmem"
+	"github.com/EMCECS/influx/mock"
+	platformtesting "github.com/EMCECS/influx/testing"
 )
 
 func initOrganizationService(f platformtesting.OrganizationFields, t *testing.T) (platform.OrganizationService, func()) {

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/influxdata/platform/logger"
-	"github.com/influxdata/platform/tsdb/tsm1"
+	"github.com/EMCECS/influx/logger"
+	"github.com/EMCECS/influx/tsdb/tsm1"
 )
 
 func TestFileStore_Read(t *testing.T) {

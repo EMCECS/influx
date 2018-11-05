@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/EMCECS/influx"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
 )
 
 func TestPrometheusScraper(t *testing.T) {

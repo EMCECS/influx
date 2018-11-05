@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/inmem"
-	kerrors "github.com/influxdata/platform/kit/errors"
-	"github.com/influxdata/platform/mock"
-	platformtesting "github.com/influxdata/platform/testing"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/inmem"
+	kerrors "github.com/EMCECS/influx/kit/errors"
+	"github.com/EMCECS/influx/mock"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/julienschmidt/httprouter"
 )
 

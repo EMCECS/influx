@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/EMCECS/influx/models"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxql"
-	"github.com/influxdata/platform/models"
 )
 
 // Available index types.

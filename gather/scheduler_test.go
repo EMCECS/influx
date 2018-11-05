@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/influx"
+	influxlogger "github.com/EMCECS/influx/logger"
+	"github.com/EMCECS/influx/mock"
+	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/platform"
-	influxlogger "github.com/influxdata/platform/logger"
-	"github.com/influxdata/platform/mock"
-	platformtesting "github.com/influxdata/platform/testing"
 )
 
 func TestScheduler(t *testing.T) {

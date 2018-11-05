@@ -4,10 +4,10 @@ import (
 	http "net/http"
 	"strings"
 
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/chronograf/server"
-	"github.com/influxdata/platform/query"
-	"github.com/influxdata/platform/storage"
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/chronograf/server"
+	"github.com/EMCECS/influx/query"
+	"github.com/EMCECS/influx/storage"
 	"go.uber.org/zap"
 )
 

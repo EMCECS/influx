@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/EMCECS/influx"
+	platformcontext "github.com/EMCECS/influx/context"
 	"github.com/coreos/bbolt"
-	"github.com/influxdata/platform"
-	platformcontext "github.com/influxdata/platform/context"
 )
 
 var (

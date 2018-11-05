@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"github.com/influxdata/flux/values"
 
+	"github.com/EMCECS/influx"
+	"github.com/EMCECS/influx/query"
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/execute"
 	"github.com/influxdata/flux/functions/inputs"
 	"github.com/influxdata/flux/plan"
-	"github.com/influxdata/platform"
-	"github.com/influxdata/platform/query"
 	"github.com/pkg/errors"
 )
 

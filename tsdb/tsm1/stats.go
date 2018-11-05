@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/influxdata/platform/pkg/binaryutil"
+	"github.com/EMCECS/influx/pkg/binaryutil"
 )
 
 const (

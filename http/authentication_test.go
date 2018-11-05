@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/influxdata/platform"
-	platformhttp "github.com/influxdata/platform/http"
-	"github.com/influxdata/platform/mock"
+	"github.com/EMCECS/influx"
+	platformhttp "github.com/EMCECS/influx/http"
+	"github.com/EMCECS/influx/mock"
 )
 
 func TestAuthenticationHandler(t *testing.T) {

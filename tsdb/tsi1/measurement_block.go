@@ -8,8 +8,8 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/influxdata/platform/pkg/rhh"
-	"github.com/influxdata/platform/tsdb"
+	"github.com/EMCECS/influx/pkg/rhh"
+	"github.com/EMCECS/influx/tsdb"
 )
 
 // MeasurementBlockVersion is the version of the measurement block.
