@@ -41,7 +41,8 @@ PRECANNED := $(shell find chronograf/canned -name '*.json')
 # List of binary cmds to build
 CMDS := \
 	bin/$(GOOS)/influx \
-	bin/$(GOOS)/influxd
+	bin/$(GOOS)/influxd \
+	bin/$(GOOS)/fluxd
 
 # Default target to build all go commands.
 #
