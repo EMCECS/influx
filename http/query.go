@@ -8,15 +8,15 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/ast"
+	"github.com/EMCECS/flux/csv"
+	"github.com/EMCECS/flux/lang"
+	"github.com/EMCECS/flux/semantic"
+	"github.com/EMCECS/flux/values"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/kit/errors"
 	"github.com/EMCECS/influx/query"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/ast"
-	"github.com/influxdata/flux/csv"
-	"github.com/influxdata/flux/lang"
-	"github.com/influxdata/flux/semantic"
-	"github.com/influxdata/flux/values"
 )
 
 // QueryRequest is a flux query request.

@@ -5,15 +5,15 @@ import (
 
 	"github.com/EMCECS/influx/query/functions/outputs"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/control"
+	"github.com/EMCECS/flux/execute"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/functions/inputs"
 	fstorage "github.com/EMCECS/influx/query/functions/inputs/storage"
 	"github.com/EMCECS/influx/storage"
 	"github.com/EMCECS/influx/storage/reads"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/control"
-	"github.com/influxdata/flux/execute"
 	"go.uber.org/zap"
 )
 

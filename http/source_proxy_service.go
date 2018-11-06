@@ -10,10 +10,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/EMCECS/flux/lang"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/influxql"
-	"github.com/influxdata/flux/lang"
 )
 
 type SourceProxyQueryService struct {

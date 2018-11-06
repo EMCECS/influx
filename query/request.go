@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/EMCECS/flux"
 	"github.com/EMCECS/influx"
-	"github.com/influxdata/flux"
 )
 
 // Request respresents the query to run.

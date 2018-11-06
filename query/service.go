@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/influxdata/flux"
+	"github.com/EMCECS/flux"
 )
 
 // QueryService represents a type capable of performing queries.

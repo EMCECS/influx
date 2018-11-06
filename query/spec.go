@@ -1,8 +1,8 @@
 package query
 
 import (
+	"github.com/EMCECS/flux"
 	"github.com/EMCECS/influx"
-	"github.com/influxdata/flux"
 )
 
 // BucketAwareOperationSpec specifies an operation that reads or writes buckets

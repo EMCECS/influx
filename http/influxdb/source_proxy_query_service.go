@@ -8,13 +8,13 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/csv"
+	"github.com/EMCECS/flux/lang"
 	"github.com/EMCECS/influx"
 	platformhttp "github.com/EMCECS/influx/http"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/influxql"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/csv"
-	"github.com/influxdata/flux/lang"
 )
 
 type SourceProxyQueryService struct {

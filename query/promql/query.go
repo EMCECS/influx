@@ -4,7 +4,7 @@ package promql
 import (
 	"fmt"
 
-	"github.com/influxdata/flux"
+	"github.com/EMCECS/flux"
 )
 
 func ParsePromQL(promql string, opts ...Option) (interface{}, error) {

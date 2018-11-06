@@ -2,6 +2,12 @@ package outputs_test
 
 import (
 	"context"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/ast"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/execute/executetest"
+	"github.com/EMCECS/flux/functions/inputs"
+	"github.com/EMCECS/flux/semantic"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/mock"
 	"github.com/EMCECS/influx/models"
@@ -10,12 +16,6 @@ import (
 	"github.com/EMCECS/influx/query/querytest"
 	"github.com/EMCECS/influx/tsdb"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/ast"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/execute/executetest"
-	"github.com/influxdata/flux/functions/inputs"
-	"github.com/influxdata/flux/semantic"
 	"testing"
 )
 

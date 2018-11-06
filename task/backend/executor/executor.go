@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/lang"
 	"github.com/EMCECS/influx/logger"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/task/backend"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/lang"
 	"go.uber.org/zap"
 )
 

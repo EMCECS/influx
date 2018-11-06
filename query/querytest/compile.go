@@ -7,13 +7,13 @@ import (
 
 	"fmt"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/functions/transformations"
+	"github.com/EMCECS/flux/semantic/semantictest"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/query"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/functions/transformations"
-	"github.com/influxdata/flux/semantic/semantictest"
 )
 
 type BucketAwareQueryTestCase struct {

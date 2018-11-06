@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/influxdata/flux"
+	"github.com/EMCECS/flux"
 )
 
 // LoggingServiceBridge implements ProxyQueryService and logs the queries while consuming a QueryService interface.

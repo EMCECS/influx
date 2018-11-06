@@ -8,8 +8,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/EMCECS/flux"
 	"github.com/EMCECS/influx/query"
-	"github.com/influxdata/flux"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"

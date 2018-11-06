@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/values"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/values"
 )
 
 // responseIterator implements flux.ResultIterator for a Response.

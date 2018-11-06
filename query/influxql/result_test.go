@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/execute/executetest"
 	"github.com/EMCECS/influx/query/influxql"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/execute/executetest"
 )
 
 func TestMultiResultEncoder_Encode(t *testing.T) {

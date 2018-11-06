@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/EMCECS/flux"
 	"github.com/EMCECS/influx/query"
-	"github.com/influxdata/flux"
 )
 
 // Endpoint contains the necessary information to connect to a specific cluster.

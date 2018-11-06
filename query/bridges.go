@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
+	"github.com/EMCECS/flux"
 	"github.com/EMCECS/influx"
-	"github.com/influxdata/flux"
 )
 
 // QueryServiceBridge implements the QueryService interface while consuming the AsyncQueryService interface.

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/EMCECS/flux/repl"
 	"github.com/EMCECS/influx"
 	_ "github.com/EMCECS/influx/query/builtin"
-	"github.com/influxdata/flux/repl"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

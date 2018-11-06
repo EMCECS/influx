@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/values"
 	"github.com/EMCECS/influx/models"
 	fstorage "github.com/EMCECS/influx/query/functions/inputs/storage"
 	"github.com/EMCECS/influx/storage/reads/datatypes"
 	"github.com/EMCECS/influx/tsdb/cursors"
 	"github.com/gogo/protobuf/types"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/values"
 )
 
 type storageTable interface {

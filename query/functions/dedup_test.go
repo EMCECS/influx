@@ -3,10 +3,10 @@ package functions_test
 import (
 	"testing"
 
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/executetest"
-	"github.com/influxdata/flux/functions"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/executetest"
+	"github.com/EMCECS/flux/functions"
 )
 
 func TestDedup_PassThrough(t *testing.T) {

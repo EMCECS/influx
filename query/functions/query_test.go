@@ -9,15 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/EMCECS/flux/csv"
+	"github.com/EMCECS/flux/lang"
+	"github.com/EMCECS/flux/querytest"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/mock"
 	"github.com/EMCECS/influx/query"
 	_ "github.com/EMCECS/influx/query/builtin"
 	"github.com/EMCECS/influx/query/influxql"
 	platformtesting "github.com/EMCECS/influx/testing"
-	"github.com/influxdata/flux/csv"
-	"github.com/influxdata/flux/lang"
-	"github.com/influxdata/flux/querytest"
 
 	"github.com/andreyvit/diff"
 )

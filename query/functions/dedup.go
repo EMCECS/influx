@@ -3,10 +3,10 @@ package functions
 import (
 	"fmt"
 
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/plan"
-	"github.com/influxdata/flux/semantic"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/plan"
+	"github.com/EMCECS/flux/semantic"
 )
 
 const DedupKind = "dedup"

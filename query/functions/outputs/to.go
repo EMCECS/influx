@@ -9,17 +9,17 @@ import (
 
 	"sort"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
+	"github.com/EMCECS/flux/functions/outputs"
+	"github.com/EMCECS/flux/interpreter"
+	"github.com/EMCECS/flux/plan"
+	"github.com/EMCECS/flux/semantic"
+	"github.com/EMCECS/flux/values"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/models"
 	istorage "github.com/EMCECS/influx/query/functions/inputs/storage"
 	"github.com/EMCECS/influx/storage"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
-	"github.com/influxdata/flux/functions/outputs"
-	"github.com/influxdata/flux/interpreter"
-	"github.com/influxdata/flux/plan"
-	"github.com/influxdata/flux/semantic"
-	"github.com/influxdata/flux/values"
 )
 
 // ToKind is the kind for the `to` flux function

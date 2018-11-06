@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/semantic/semantictest"
 	"github.com/EMCECS/influx"
 	"github.com/EMCECS/influx/mock"
 	"github.com/EMCECS/influx/query/influxql"
 	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/semantic/semantictest"
 )
 
 func printUsage() {

@@ -3,8 +3,8 @@ package influxql
 import (
 	"fmt"
 
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/functions/transformations"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/functions/transformations"
 	"github.com/influxdata/influxql"
 )
 

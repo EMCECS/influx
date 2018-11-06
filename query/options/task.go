@@ -2,8 +2,8 @@
 package options
 
 import (
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/values"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/values"
 )
 
 func init() {

@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/EMCECS/flux"
 	"github.com/EMCECS/influx/query"
 	platformtesting "github.com/EMCECS/influx/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/influxdata/flux"
 )
 
 var CmpOpts = []cmp.Option{

@@ -1,12 +1,12 @@
 package spectests
 
 import (
-	"github.com/influxdata/flux/functions/inputs"
-	"github.com/influxdata/flux/functions/transformations"
+	"github.com/EMCECS/flux/functions/inputs"
+	"github.com/EMCECS/flux/functions/transformations"
 	"time"
 
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/execute"
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/execute"
 )
 
 func init() {

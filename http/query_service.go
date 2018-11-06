@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/EMCECS/flux"
+	"github.com/EMCECS/flux/csv"
 	"github.com/EMCECS/influx/query"
-	"github.com/influxdata/flux"
-	"github.com/influxdata/flux/csv"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"

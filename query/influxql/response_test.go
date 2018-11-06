@@ -5,10 +5,10 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/EMCECS/flux/csv"
 	"github.com/EMCECS/influx/query/influxql"
 	"github.com/andreyvit/diff"
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/flux/csv"
 )
 
 var crlfPattern = regexp.MustCompile(`\r?\n`)
