@@ -3,10 +3,10 @@ package functions
 import (
 	"fmt"
 
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/plan"
-	"github.com/EMCECS/influx/query/semantic"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/execute"
+	"github.com/influxdata/flux/plan"
+	"github.com/influxdata/flux/semantic"
 )
 
 const DedupKind = "dedup"
@@ -14,18 +14,21 @@ const DedupKind = "dedup"
 type DedupOpSpec struct {
 }
 
-var dedupSignature = query.DefaultFunctionSignature()
-
 func init() {
-	dedupSignature.Params["column"] = semantic.String
+	dedupSignature := flux.FunctionSignature(
+		map[string]semantic.PolyType{
+			"column": semantic.String,
+		},
+		nil,
+	)
 
-	query.RegisterFunction(DedupKind, createDedupOpSpec, dedupSignature)
-	query.RegisterOpSpec(DedupKind, newDedupOp)
+	flux.RegisterFunction(DedupKind, createDedupOpSpec, dedupSignature)
+	flux.RegisterOpSpec(DedupKind, newDedupOp)
 	plan.RegisterProcedureSpec(DedupKind, newDedupProcedure, DedupKind)
 	execute.RegisterTransformation(DedupKind, createDedupTransformation)
 }
 
-func createDedupOpSpec(args query.Arguments, a *query.Administration) (query.OperationSpec, error) {
+func createDedupOpSpec(args flux.Arguments, a *flux.Administration) (flux.OperationSpec, error) {
 	if err := a.AddParentFromArgs(args); err != nil {
 		return nil, err
 	}
@@ -35,11 +38,11 @@ func createDedupOpSpec(args query.Arguments, a *query.Administration) (query.Ope
 	return spec, nil
 }
 
-func newDedupOp() query.OperationSpec {
+func newDedupOp() flux.OperationSpec {
 	return new(DedupOpSpec)
 }
 
-func (s *DedupOpSpec) Kind() query.OperationKind {
+func (s *DedupOpSpec) Kind() flux.OperationKind {
 	return DedupKind
 }
 
@@ -47,14 +50,13 @@ type DedupProcedureSpec struct {
 	Column string
 }
 
-func newDedupProcedure(qs query.OperationSpec, pa plan.Administration) (plan.ProcedureSpec, error) {
+func newDedupProcedure(qs flux.OperationSpec, pa plan.Administration) (plan.ProcedureSpec, error) {
 	_, ok := qs.(*DedupOpSpec)
 	if !ok {
 		return nil, fmt.Errorf("invalid spec type %T", qs)
 	}
 
-	return &DedupProcedureSpec{
-	}, nil
+	return &DedupProcedureSpec{}, nil
 }
 
 func (s *DedupProcedureSpec) Kind() plan.ProcedureKind {
@@ -86,16 +88,16 @@ type dedupTransformation struct {
 
 func NewDedupTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *DedupProcedureSpec) *dedupTransformation {
 	return &dedupTransformation{
-		d:      d,
-		cache:  cache,
+		d:     d,
+		cache: cache,
 	}
 }
 
-func (t *dedupTransformation) RetractTable(id execute.DatasetID, key query.GroupKey) error {
+func (t *dedupTransformation) RetractTable(id execute.DatasetID, key flux.GroupKey) error {
 	return t.d.RetractTable(key)
 }
 
-func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error {
+func (t *dedupTransformation) Process(id execute.DatasetID, b flux.Table) error {
 
 	builder, created := t.cache.TableBuilder(b.Key())
 	if !created {
@@ -118,17 +120,17 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 	stringDedup = make(map[string]bool)
 	timeDedup = make(map[execute.Time]bool)
 
-	return b.Do(func(cr query.ColReader) error {
+	return b.Do(func(cr flux.ColReader) error {
 		l := cr.Len()
 		colCount := len(builder.Cols())
 		// loop over the records
-		for i := 0; i < l; i ++ {
+		for i := 0; i < l; i++ {
 			duplicateFlag := true
 			// loop over the columns
-			for j := 0; j < colCount; j ++ {
+			for j := 0; j < colCount; j++ {
 				col := builder.Cols()[j]
 				switch col.Type {
-				case query.TBool:
+				case flux.TBool:
 					v := cr.Bools(j)[i]
 					if boolDedup[v] {
 						continue
@@ -136,7 +138,7 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 						duplicateFlag = false
 					}
 					boolDedup[v] = true
-				case query.TInt:
+				case flux.TInt:
 					v := cr.Ints(j)[i]
 					if intDedup[v] {
 						continue
@@ -144,7 +146,7 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 						duplicateFlag = false
 					}
 					intDedup[v] = true
-				case query.TUInt:
+				case flux.TUInt:
 					v := cr.UInts(j)[i]
 					if uintDedup[v] {
 						continue
@@ -152,7 +154,7 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 						duplicateFlag = false
 					}
 					uintDedup[v] = true
-				case query.TFloat:
+				case flux.TFloat:
 					v := cr.Floats(j)[i]
 					if floatDedup[v] {
 						continue
@@ -160,7 +162,7 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 						duplicateFlag = false
 					}
 					floatDedup[v] = true
-				case query.TString:
+				case flux.TString:
 					v := cr.Strings(j)[i]
 					if stringDedup[v] {
 						continue
@@ -168,7 +170,7 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 						duplicateFlag = false
 					}
 					stringDedup[v] = true
-				case query.TTime:
+				case flux.TTime:
 					v := cr.Times(j)[i]
 					if timeDedup[v] {
 						continue

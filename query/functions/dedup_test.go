@@ -3,10 +3,10 @@ package functions_test
 import (
 	"testing"
 
-	"github.com/EMCECS/influx/query"
-	"github.com/EMCECS/influx/query/execute"
-	"github.com/EMCECS/influx/query/execute/executetest"
-	"github.com/EMCECS/influx/query/functions"
+	"github.com/influxdata/flux"
+	"github.com/influxdata/flux/execute"
+	"github.com/influxdata/flux/executetest"
+	"github.com/influxdata/flux/functions"
 )
 
 func TestDedup_PassThrough(t *testing.T) {
@@ -14,8 +14,7 @@ func TestDedup_PassThrough(t *testing.T) {
 		s := functions.NewDedupTransformation(
 			d,
 			c,
-			&functions.DedupProcedureSpec{
-			},
+			&functions.DedupProcedureSpec{},
 		)
 		return s
 	})
@@ -25,7 +24,7 @@ func TestDedup_Process(t *testing.T) {
 	testCases := []struct {
 		name string
 		spec *functions.DedupProcedureSpec
-		data []query.Table
+		data []flux.Table
 		want []*executetest.Table
 	}{
 		{
@@ -33,10 +32,10 @@ func TestDedup_Process(t *testing.T) {
 			spec: &functions.DedupProcedureSpec{
 				Column: "_value",
 			},
-			data: []query.Table{&executetest.Table{
-				ColMeta: []query.ColMeta{
-					{Label: "_time", Type: query.TTime},
-					{Label: "_value", Type: query.TFloat},
+			data: []flux.Table{&executetest.Table{
+				ColMeta: []flux.ColMeta{
+					{Label: "_time", Type: flux.TTime},
+					{Label: "_value", Type: flux.TFloat},
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), 1.0},
@@ -46,9 +45,9 @@ func TestDedup_Process(t *testing.T) {
 				},
 			}},
 			want: []*executetest.Table{{
-				ColMeta: []query.ColMeta{
-					{Label: "_time", Type: query.TTime},
-					{Label: "_value", Type: query.TFloat},
+				ColMeta: []flux.ColMeta{
+					{Label: "_time", Type: flux.TTime},
+					{Label: "_value", Type: flux.TFloat},
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), 1.0},
@@ -62,11 +61,11 @@ func TestDedup_Process(t *testing.T) {
 			spec: &functions.DedupProcedureSpec{
 				Column: "t1",
 			},
-			data: []query.Table{&executetest.Table{
-				ColMeta: []query.ColMeta{
-					{Label: "_time", Type: query.TTime},
-					{Label: "t1", Type: query.TString},
-					{Label: "_value", Type: query.TFloat},
+			data: []flux.Table{&executetest.Table{
+				ColMeta: []flux.ColMeta{
+					{Label: "_time", Type: flux.TTime},
+					{Label: "t1", Type: flux.TString},
+					{Label: "_value", Type: flux.TFloat},
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
@@ -76,10 +75,10 @@ func TestDedup_Process(t *testing.T) {
 				},
 			}},
 			want: []*executetest.Table{{
-				ColMeta: []query.ColMeta{
-					{Label: "_time", Type: query.TTime},
-					{Label: "t1", Type: query.TString},
-					{Label: "_value", Type: query.TFloat},
+				ColMeta: []flux.ColMeta{
+					{Label: "_time", Type: flux.TTime},
+					{Label: "t1", Type: flux.TString},
+					{Label: "_value", Type: flux.TFloat},
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
@@ -93,11 +92,11 @@ func TestDedup_Process(t *testing.T) {
 			spec: &functions.DedupProcedureSpec{
 				Column: "_time",
 			},
-			data: []query.Table{&executetest.Table{
-				ColMeta: []query.ColMeta{
-					{Label: "_time", Type: query.TTime},
-					{Label: "t1", Type: query.TString},
-					{Label: "_value", Type: query.TFloat},
+			data: []flux.Table{&executetest.Table{
+				ColMeta: []flux.ColMeta{
+					{Label: "_time", Type: flux.TTime},
+					{Label: "t1", Type: flux.TString},
+					{Label: "_value", Type: flux.TFloat},
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
@@ -107,10 +106,10 @@ func TestDedup_Process(t *testing.T) {
 				},
 			}},
 			want: []*executetest.Table{{
-				ColMeta: []query.ColMeta{
-					{Label: "_time", Type: query.TTime},
-					{Label: "t1", Type: query.TString},
-					{Label: "_value", Type: query.TFloat},
+				ColMeta: []flux.ColMeta{
+					{Label: "_time", Type: flux.TTime},
+					{Label: "t1", Type: flux.TString},
+					{Label: "_value", Type: flux.TFloat},
 				},
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
