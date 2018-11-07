@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"fmt"
-	"github.com/EMCECS/influx"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/functions"
 	"github.com/EMCECS/influx/query/semantic/semantictest"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/EMCECS/influx"
+	"fmt"
 )
 
 type NewQueryTestCase struct {

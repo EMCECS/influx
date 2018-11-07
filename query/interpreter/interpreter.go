@@ -169,7 +169,6 @@ func (itrp *Interpreter) doExpression(expr semantic.Expression, scope *Scope) (v
 		v, err := itrp.doCall(e, scope)
 		if err != nil {
 			// Determine function name
-			fmt.Printf("Error: %+v\n", err)
 			return nil, errors.Wrapf(err, "error calling function %q", functionName(e))
 		}
 		return v, nil
