@@ -1069,9 +1069,9 @@ func (a *arguments) GetRequiredArray(name string, t semantic.Kind) (values.Array
 		return nil, err
 	}
 	arr := v.Array()
-	if arr.Type().ElementType() != t {
-		return nil, fmt.Errorf("keyword argument %q should be of an array of type %v, but got an array of type %v", name, t, arr.Type())
-	}
+	//if arr.Type().ElementType() != t {
+	//	return nil, fmt.Errorf("keyword argument %q should be of an array of type %v, but got an array of type %v", name, t, arr.Type())
+	//}
 	return arr, nil
 }
 func (a *arguments) GetFunction(name string) (values.Function, bool, error) {
