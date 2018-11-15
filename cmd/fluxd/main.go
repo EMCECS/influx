@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	nethttp "net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"strings"
