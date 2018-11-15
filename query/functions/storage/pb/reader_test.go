@@ -1,20 +1,20 @@
 package pb
 
 import (
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/EMCECS/influx/mock"
-	ostorage "github.com/influxdata/influxdb/services/storage"
 	"google.golang.org/grpc"
-	"context"
-	"strconv"
 )
 
 const (
 	DefaultPort = 8082
 )
 
-func TestReader_Success(t *testing.T) {
+func TestWaitConnForReady(t *testing.T) {
+	//setup mock server
 	server := mock.NewServerMock(mock.DefaultConnProt, mock.DefaultConnHost, DefaultPort)
 	defer server.Close()
 	err := server.Start()
@@ -22,63 +22,85 @@ func TestReader_Success(t *testing.T) {
 		t.Error(err)
 	}
 	hostWithPort := mock.DefaultConnHost + ":" + strconv.Itoa(DefaultPort)
+	//setup grpc connections with server
 	cc, err := grpc.Dial(hostWithPort, grpc.WithInsecure())
 	if err != nil {
 		t.Error(err)
 	}
-	c := &connection {
-		host: hostWithPort,
-		conn: cc,
-		client: ostorage.NewStorageClient(cc),
-	}
-	ctx := context.TODO()
-	req := &ostorage.ReadRequest{}
-	stream, newConn, err := readWithRecovery(c, &ctx, req)
-	if stream == nil {
-		t.Error("no stream returned")
-	}
-	if newConn != nil {
-		t.Error("unexpected reconnect")
-	}
+	defer cc.Close()
+	cc2, err := grpc.Dial(hostWithPort, grpc.WithInsecure())
 	if err != nil {
 		t.Error(err)
 	}
-
-}
-
-func TestReader_ConnRecovery(t *testing.T) {
-
-	var server = mock.NewServerMock(mock.DefaultConnProt, mock.DefaultConnHost, DefaultPort)
-	var err = server.Start()
+	defer cc2.Close()
+	cc3, err := grpc.Dial(hostWithPort, grpc.WithInsecure())
 	if err != nil {
 		t.Error(err)
 	}
-
-	hostWithPort := mock.DefaultConnHost + ":" + strconv.Itoa(DefaultPort)
-	cc, err := grpc.Dial(hostWithPort, grpc.WithInsecure())
+	defer cc3.Close()
+	//setup connection with non exist host that will always fail to connect
+	cctimeout, err := grpc.Dial("passthrough:///Non-Existent.Server:80", grpc.WithInsecure())
 	if err != nil {
 		t.Error(err)
 	}
-	c := &connection {
-		host: hostWithPort,
-		conn: cc,
-		client: ostorage.NewStorageClient(cc),
-	}
-	ctx := context.TODO()
-	req := &ostorage.ReadRequest{}
+	defer cctimeout.Close()
 
-	server.Close()
-	server = mock.NewServerMock(mock.DefaultConnProt, mock.DefaultConnHost, DefaultPort)
-	err = server.Start()
-	if err != nil {
-		t.Error(err)
+	type args struct {
+		conns []connection
+		wait  time.Duration
 	}
-
-	stream, _, err := readWithRecovery(c, &ctx, req)
-	if stream == nil {
-		t.Error("no stream returned")
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{"Ready multiple conn",
+			args{
+				[]connection{
+					connection{conn: cc},
+					connection{conn: cc2},
+					connection{conn: cc3},
+				},
+				10 * time.Millisecond,
+			},
+			false,
+		},
+		{"Ready one",
+			args{
+				[]connection{
+					connection{conn: cc},
+					connection{conn: cc2},
+					connection{conn: cc3},
+				},
+				10 * time.Millisecond,
+			},
+			false,
+		},
+		{"Cancelled",
+			args{
+				[]connection{
+					connection{conn: cc},
+					connection{conn: cc2},
+					connection{conn: cc3},
+					connection{conn: cctimeout},
+				},
+				10 * time.Millisecond,
+			},
+			true,
+		},
+		{"Empty",
+			args{
+				[]connection{},
+				10 * time.Millisecond,
+			},
+			false,
+		},
 	}
-	if err != nil {
-		t.Error(err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := WaitConnForReady(tt.args.conns, tt.args.wait); (err != nil) != tt.wantErr {
+				t.Errorf("WaitConnForReady() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

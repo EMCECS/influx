@@ -6,17 +6,20 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	ostorage "github.com/influxdata/influxdb/services/storage"
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/execute"
 	"github.com/EMCECS/influx/query/functions/storage"
 	"github.com/EMCECS/influx/query/values"
+	"github.com/gogo/protobuf/types"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	ostorage "github.com/influxdata/influxdb/services/storage"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/keepalive"
 )
 
 func NewReader(hl storage.HostLookup) (*reader, error) {
@@ -31,6 +34,11 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 			grpc.WithInsecure(),
 			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer)),
 			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer)),
+			grpc.WithBackoffMaxDelay(5*time.Second),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    time.Second,
+				Timeout: 3 * time.Second,
+			}),
 		)
 		if err != nil {
 			return nil, err
@@ -40,6 +48,11 @@ func NewReader(hl storage.HostLookup) (*reader, error) {
 			conn:   conn,
 			client: ostorage.NewStorageClient(conn),
 		}
+	}
+	// blocking wait for grpc connection.
+	err := WaitConnForReady(conns, 20*time.Second)
+	if err != nil {
+		println("Bootstrap grpc connection error: " + err.Error())
 	}
 	return &reader{
 		conns: conns,
@@ -129,7 +142,7 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 	isGrouping := req.Group != ostorage.GroupAll
 	streams := make([]*streamState, 0, len(bi.conns))
 
-	for i, c := range bi.conns {
+	for _, c := range bi.conns {
 		if len(bi.readSpec.Hosts) > 0 {
 			// Filter down to only hosts provided
 			found := false
@@ -143,17 +156,15 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 				continue
 			}
 		}
+		// If connection is not Ready - we skip it. Even it's Connecting.
+		if c.conn.GetState() != connectivity.Ready {
+			continue
+		}
 
-		stream, newConn, err := readWithRecovery(&c, &bi.ctx, &req)
+		stream, err := c.client.Read(bi.ctx, &req)
 
 		if err != nil {
 			println("Client read error: " + err.Error())
-		}
-
-		if newConn != nil {
-			// replace the lost connection with new one
-			bi.conns[i].conn.Close()
-			bi.conns[i] = *newConn
 		}
 
 		if stream != nil {
@@ -174,31 +185,6 @@ func (bi *tableIterator) Do(f func(query.Table) error) error {
 		return bi.handleGroupRead(f, ms)
 	}
 	return bi.handleRead(f, ms)
-}
-
-func readWithRecovery(c *connection, ctx *context.Context, req *ostorage.ReadRequest) (ostorage.Storage_ReadClient, *connection, error) {
-	stream, err := c.client.Read(*ctx, req)
-	if err == nil {
-		return stream, nil, nil
-	} else {
-		var h = c.host
-		println("Client read error, try to reestablish the connection to " + h + "...")
-		cc, err := grpc.Dial(h, grpc.WithInsecure())
-		if err == nil {
-			println("The connection to " + h + " was reestablished, retrying to read")
-			var cl = ostorage.NewStorageClient(cc)
-			var newC = &connection {
-				host: h,
-				conn: cc,
-				client: cl,
-			}
-			stream, err = cl.Read(*ctx, req)
-			return stream, newC, err
-		} else {
-			println("Failed to reestablish the connection to " + h + "")
-			return nil, nil, err
-		}
-	}
 }
 
 func (bi *tableIterator) handleRead(f func(query.Table) error, ms *mergedStreams) error {
@@ -1002,4 +988,23 @@ func readFrameType(frame ostorage.ReadResponse_Frame) frameType {
 
 func indexOfTag(t []ostorage.Tag, k string) int {
 	return sort.Search(len(t), func(i int) bool { return string(t[i].Key) >= k })
+}
+
+// WaitConnForReady is blocking wait processes, that ensures that all connections
+// is ready at boot
+func WaitConnForReady(conns []connection, wait time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	for _, c := range conns {
+		for {
+			s := c.conn.GetState()
+			if s == connectivity.Ready {
+				break
+			}
+			if !c.conn.WaitForStateChange(ctx, s) {
+				return ctx.Err()
+			}
+		}
+	}
+	return nil
 }
