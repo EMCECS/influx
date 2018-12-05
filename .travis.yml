@@ -25,7 +25,7 @@ install:
 
 script:
   - make test
-  - make test-race
+  - make test-go-race
   - make vet 
   # - make bench
 
