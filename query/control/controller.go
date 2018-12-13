@@ -453,7 +453,7 @@ func (q *Query) finish() {
 	}
 
 	q.parentSpan.Finish()
-	q.c.queryDone <- q
+	go func() { q.c.queryDone <- q }()
 	close(q.ready)
 }
 
