@@ -132,50 +132,50 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 					v := cr.Bools(j)[i]
 					if boolDedup[v] {
 						continue
-					} else {
-						duplicateFlag = false
 					}
+					duplicateFlag = false
 					boolDedup[v] = true
+					break
 				case query.TInt:
 					v := cr.Ints(j)[i]
 					if intDedup[v] {
 						continue
-					} else {
-						duplicateFlag = false
 					}
+					duplicateFlag = false
 					intDedup[v] = true
+					break
 				case query.TUInt:
 					v := cr.UInts(j)[i]
 					if uintDedup[v] {
 						continue
-					} else {
-						duplicateFlag = false
 					}
+					duplicateFlag = false
 					uintDedup[v] = true
+					break
 				case query.TFloat:
 					v := cr.Floats(j)[i]
 					if floatDedup[v] {
 						continue
-					} else {
-						duplicateFlag = false
 					}
+					duplicateFlag = false
 					floatDedup[v] = true
+					break
 				case query.TString:
 					v := cr.Strings(j)[i]
 					if stringDedup[v] {
 						continue
-					} else {
-						duplicateFlag = false
 					}
+					duplicateFlag = false
 					stringDedup[v] = true
+					break
 				case query.TTime:
 					v := cr.Times(j)[i]
 					if timeDedup[v] {
 						continue
-					} else {
-						duplicateFlag = false
 					}
+					duplicateFlag = false
 					timeDedup[v] = true
+					break
 				}
 			}
 
