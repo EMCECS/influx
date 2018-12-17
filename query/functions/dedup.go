@@ -95,13 +95,13 @@ func (t *dedupTransformation) RetractTable(id execute.DatasetID, key query.Group
 	return t.d.RetractTable(key)
 }
 
-func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error {
+func (t *dedupTransformation) Process(id execute.DatasetID, tbl query.Table) error {
 
-	builder, created := t.cache.TableBuilder(b.Key())
+	builder, created := t.cache.TableBuilder(tbl.Key())
 	if !created {
-		return fmt.Errorf("dedup found duplicate block with key: %v", b.Key())
+		return fmt.Errorf("dedup found duplicate block with key: %v", tbl.Key())
 	}
-	execute.AddTableCols(b, builder)
+	execute.AddTableCols(tbl, builder)
 
 	var (
 		boolDedup   map[bool]bool
@@ -118,64 +118,66 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 	stringDedup = make(map[string]bool)
 	timeDedup = make(map[execute.Time]bool)
 
-	return b.Do(func(cr query.ColReader) error {
+	return tbl.Do(func(cr query.ColReader) error {
 		l := cr.Len()
 		colCount := len(builder.Cols())
 		// loop over the records
 		for i := 0; i < l; i ++ {
+			println()
 			duplicateFlag := true
 			// loop over the columns
 			for j := 0; j < colCount; j ++ {
 				col := builder.Cols()[j]
+				print(cr.Key()); print(",")
 				switch col.Type {
 				case query.TBool:
 					v := cr.Bools(j)[i]
 					if boolDedup[v] {
 						continue
+					} else {
+						duplicateFlag = false
 					}
-					duplicateFlag = false
 					boolDedup[v] = true
-					break
 				case query.TInt:
 					v := cr.Ints(j)[i]
 					if intDedup[v] {
 						continue
+					} else {
+						duplicateFlag = false
 					}
-					duplicateFlag = false
 					intDedup[v] = true
-					break
 				case query.TUInt:
 					v := cr.UInts(j)[i]
 					if uintDedup[v] {
 						continue
+					} else {
+						duplicateFlag = false
 					}
-					duplicateFlag = false
 					uintDedup[v] = true
-					break
 				case query.TFloat:
 					v := cr.Floats(j)[i]
 					if floatDedup[v] {
 						continue
+					} else {
+						duplicateFlag = false
 					}
-					duplicateFlag = false
 					floatDedup[v] = true
-					break
 				case query.TString:
 					v := cr.Strings(j)[i]
 					if stringDedup[v] {
 						continue
+					} else {
+						duplicateFlag = false
 					}
-					duplicateFlag = false
 					stringDedup[v] = true
-					break
 				case query.TTime:
 					v := cr.Times(j)[i]
 					if timeDedup[v] {
 						continue
+					} else {
+						duplicateFlag = false
 					}
-					duplicateFlag = false
 					timeDedup[v] = true
-					break
 				}
 			}
 
