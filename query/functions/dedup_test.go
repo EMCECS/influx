@@ -71,8 +71,8 @@ func TestDedup_Process(t *testing.T) {
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
 					{execute.Time(2), "a", 1.0},
-					{execute.Time(3), "b", 3.0},
 					{execute.Time(2), "a", 1.0},
+					{execute.Time(3), "b", 3.0},
 				},
 			}},
 			want: []*executetest.Table{{

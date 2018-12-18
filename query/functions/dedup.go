@@ -104,85 +104,75 @@ func (t *dedupTransformation) Process(id execute.DatasetID, tbl query.Table) err
 	execute.AddTableCols(tbl, builder)
 
 	var (
-		boolDedup   map[bool]bool
-		intDedup    map[int64]bool
-		uintDedup   map[uint64]bool
-		floatDedup  map[float64]bool
-		stringDedup map[string]bool
-		timeDedup   map[execute.Time]bool
+		lastBool   map[int]bool
+		lastInt    map[int]int64
+		lastUint   map[int]uint64
+		lastFloat  map[int]float64
+		lastString map[int]string
+		lastTime   map[int]execute.Time
 	)
-	boolDedup = make(map[bool]bool)
-	intDedup = make(map[int64]bool)
-	uintDedup = make(map[uint64]bool)
-	floatDedup = make(map[float64]bool)
-	stringDedup = make(map[string]bool)
-	timeDedup = make(map[execute.Time]bool)
+	lastBool = make(map[int]bool)
+	lastInt = make(map[int]int64)
+	lastUint = make(map[int]uint64)
+	lastFloat = make(map[int]float64)
+	lastString = make(map[int]string)
+	lastTime = make(map[int]execute.Time)
+
+	firstRow := true
 
 	return tbl.Do(func(cr query.ColReader) error {
+
 		l := cr.Len()
-		colCount := len(builder.Cols())
+		builderCols := builder.Cols()
+		colCount := len(builderCols)
+
 		// loop over the records
 		for i := 0; i < l; i ++ {
-			println()
-			duplicateFlag := true
-			// loop over the columns
-			for j := 0; j < colCount; j ++ {
-				col := builder.Cols()[j]
-				print(cr.Key()); print(",")
+
+			duplicateFlag := !firstRow // assume the row to be a duplicate if the row is not 1st
+
+			for j := 0; j < colCount; j ++ { // loop over the columns
+				col := builderCols[j]
 				switch col.Type {
 				case query.TBool:
-					v := cr.Bools(j)[i]
-					if boolDedup[v] {
-						continue
-					} else {
+					if cr.Bools(j)[i] != lastBool[j] {
 						duplicateFlag = false
 					}
-					boolDedup[v] = true
+					lastBool[j] = cr.Bools(j)[i]
 				case query.TInt:
-					v := cr.Ints(j)[i]
-					if intDedup[v] {
-						continue
-					} else {
+					if cr.Ints(j)[i] != lastInt[j] {
 						duplicateFlag = false
 					}
-					intDedup[v] = true
+					lastInt[j] = cr.Ints(j)[i]
 				case query.TUInt:
-					v := cr.UInts(j)[i]
-					if uintDedup[v] {
-						continue
-					} else {
+					if cr.UInts(j)[i] != lastUint[j] {
 						duplicateFlag = false
 					}
-					uintDedup[v] = true
+					lastUint[j] = cr.UInts(j)[i]
 				case query.TFloat:
-					v := cr.Floats(j)[i]
-					if floatDedup[v] {
-						continue
-					} else {
+					if cr.Floats(j)[i] != lastFloat[j] {
 						duplicateFlag = false
 					}
-					floatDedup[v] = true
+					lastFloat[j] = cr.Floats(j)[i]
 				case query.TString:
-					v := cr.Strings(j)[i]
-					if stringDedup[v] {
-						continue
-					} else {
+					if cr.Strings(j)[i] != lastString[j] {
 						duplicateFlag = false
 					}
-					stringDedup[v] = true
+					lastString[j] = cr.Strings(j)[i]
 				case query.TTime:
-					v := cr.Times(j)[i]
-					if timeDedup[v] {
-						continue
-					} else {
+					if cr.Times(j)[i] != lastTime[j] {
 						duplicateFlag = false
 					}
-					timeDedup[v] = true
+					lastTime[j] = cr.Times(j)[i]
 				}
 			}
 
 			if !duplicateFlag {
 				execute.AppendRecord(i, cr, builder)
+			}
+
+			if firstRow {
+				firstRow = false
 			}
 		}
 		return nil
