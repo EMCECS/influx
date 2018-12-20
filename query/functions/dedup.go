@@ -52,8 +52,7 @@ func newDedupProcedure(qs query.OperationSpec, pa plan.Administration) (plan.Pro
 		return nil, fmt.Errorf("invalid spec type %T", qs)
 	}
 
-	return &DedupProcedureSpec{
-	}, nil
+	return &DedupProcedureSpec{}, nil
 }
 
 func (s *DedupProcedureSpec) Kind() plan.ProcedureKind {
@@ -85,8 +84,8 @@ type dedupTransformation struct {
 
 func NewDedupTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *DedupProcedureSpec) *dedupTransformation {
 	return &dedupTransformation{
-		d:      d,
-		cache:  cache,
+		d:     d,
+		cache: cache,
 	}
 }
 
@@ -104,8 +103,8 @@ func (t *dedupTransformation) Process(id execute.DatasetID, tbl query.Table) err
 	builderCols := builder.Cols()
 	colCount := len(builderCols)
 	colIdxTimestamp := -1
-	for i := 0; i < colCount; i ++ {
-		col := builderCols[i];
+	for i := 0; i < colCount; i++ {
+		col := builderCols[i]
 		if "_time" == col.Label {
 			colIdxTimestamp = i
 		}
@@ -114,21 +113,16 @@ func (t *dedupTransformation) Process(id execute.DatasetID, tbl query.Table) err
 		return fmt.Errorf("dedup: column _time not found in the table with key %v", tbl.Key())
 	}
 	uniqueTimestamps := make(map[execute.Time]struct{})
-	firstRow := true
 
 	return tbl.Do(func(cr query.ColReader) error {
 		l := cr.Len()
 		// loop over the records
-		for i := 0; i < l; i ++ {
+		for i := 0; i < l; i++ {
 			ts := cr.Times(colIdxTimestamp)[i]
-			if firstRow {
-				firstRow = false
+			_, duplicateFlag := uniqueTimestamps[ts]
+			if !duplicateFlag {
 				uniqueTimestamps[ts] = struct{}{}
-			} else {
-				_, duplicateFlag := uniqueTimestamps[ts]
-				if !duplicateFlag {
-					execute.AppendRecord(i, cr, builder)
-				}
+				execute.AppendRecord(i, cr, builder)
 			}
 		}
 		return nil
