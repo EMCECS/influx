@@ -99,6 +99,13 @@ func (t *dedupTransformation) Process(id execute.DatasetID, tbl query.Table) err
 	if !created {
 		return fmt.Errorf("dedup found duplicate table with key: %v", tbl.Key())
 	}
+    // assumption here is that Process() is called for each table and is never called
+    // for same table again (with additional data, for example)
+    // exclude lines with same timstamp, and ignore different values for the same timestamp
+    // note that the routine can be improved even more:
+    //  if rows are sent to Process only with increasing timestamp from one instance,
+    //  then routine can simply keep "last timestamp" value and remove all lines
+    //  with timestamp equal or below this "last timestamp" value
 	execute.AddTableCols(tbl, builder)
 	builderCols := builder.Cols()
 	colCount := len(builderCols)
