@@ -14,8 +14,7 @@ func TestDedup_PassThrough(t *testing.T) {
 		s := functions.NewDedupTransformation(
 			d,
 			c,
-			&functions.DedupProcedureSpec{
-			},
+			&functions.DedupProcedureSpec{},
 		)
 		return s
 	})
@@ -71,8 +70,8 @@ func TestDedup_Process(t *testing.T) {
 				Data: [][]interface{}{
 					{execute.Time(1), "a", 2.0},
 					{execute.Time(2), "a", 1.0},
-					{execute.Time(3), "b", 3.0},
 					{execute.Time(2), "a", 1.0},
+					{execute.Time(3), "b", 3.0},
 				},
 			}},
 			want: []*executetest.Table{{
@@ -116,7 +115,6 @@ func TestDedup_Process(t *testing.T) {
 					{execute.Time(1), "a", 2.0},
 					{execute.Time(2), "a", 1.0},
 					{execute.Time(3), "b", 3.0},
-					{execute.Time(3), "c", 1.0},
 				},
 			}},
 		},

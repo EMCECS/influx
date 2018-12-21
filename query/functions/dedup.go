@@ -2,7 +2,6 @@ package functions
 
 import (
 	"fmt"
-
 	"github.com/EMCECS/influx/query"
 	"github.com/EMCECS/influx/query/execute"
 	"github.com/EMCECS/influx/query/plan"
@@ -53,8 +52,7 @@ func newDedupProcedure(qs query.OperationSpec, pa plan.Administration) (plan.Pro
 		return nil, fmt.Errorf("invalid spec type %T", qs)
 	}
 
-	return &DedupProcedureSpec{
-	}, nil
+	return &DedupProcedureSpec{}, nil
 }
 
 func (s *DedupProcedureSpec) Kind() plan.ProcedureKind {
@@ -86,8 +84,8 @@ type dedupTransformation struct {
 
 func NewDedupTransformation(d execute.Dataset, cache execute.TableBuilderCache, spec *DedupProcedureSpec) *dedupTransformation {
 	return &dedupTransformation{
-		d:      d,
-		cache:  cache,
+		d:     d,
+		cache: cache,
 	}
 }
 
@@ -95,91 +93,42 @@ func (t *dedupTransformation) RetractTable(id execute.DatasetID, key query.Group
 	return t.d.RetractTable(key)
 }
 
-func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error {
+func (t *dedupTransformation) Process(id execute.DatasetID, tbl query.Table) error {
 
-	builder, created := t.cache.TableBuilder(b.Key())
+	builder, created := t.cache.TableBuilder(tbl.Key())
 	if !created {
-		return fmt.Errorf("dedup found duplicate block with key: %v", b.Key())
+		return fmt.Errorf("dedup found duplicate table with key: %v", tbl.Key())
 	}
-	execute.AddTableCols(b, builder)
+    // assumption here is that Process() is called for each table and is never called
+    // for same table again (with additional data, for example)
+    // exclude lines with same timstamp, and ignore different values for the same timestamp
+    // note that the routine can be improved even more:
+    //  if rows are sent to Process only with increasing timestamp from one instance,
+    //  then routine can simply keep "last timestamp" value and remove all lines
+    //  with timestamp equal or below this "last timestamp" value
+	execute.AddTableCols(tbl, builder)
+	builderCols := builder.Cols()
+	colCount := len(builderCols)
+	colIdxTimestamp := -1
+	for i := 0; i < colCount; i++ {
+		col := builderCols[i]
+		if "_time" == col.Label {
+			colIdxTimestamp = i
+		}
+	}
+	if colIdxTimestamp < 0 {
+		return fmt.Errorf("dedup: column _time not found in the table with key %v", tbl.Key())
+	}
+	uniqueTimestamps := make(map[execute.Time]struct{})
 
-	var (
-		boolDedup   map[bool]bool
-		intDedup    map[int64]bool
-		uintDedup   map[uint64]bool
-		floatDedup  map[float64]bool
-		stringDedup map[string]bool
-		timeDedup   map[execute.Time]bool
-	)
-	boolDedup = make(map[bool]bool)
-	intDedup = make(map[int64]bool)
-	uintDedup = make(map[uint64]bool)
-	floatDedup = make(map[float64]bool)
-	stringDedup = make(map[string]bool)
-	timeDedup = make(map[execute.Time]bool)
-
-	return b.Do(func(cr query.ColReader) error {
+	return tbl.Do(func(cr query.ColReader) error {
 		l := cr.Len()
-		colCount := len(builder.Cols())
 		// loop over the records
-		for i := 0; i < l; i ++ {
-			duplicateFlag := true
-			// loop over the columns
-			for j := 0; j < colCount; j ++ {
-				col := builder.Cols()[j]
-				switch col.Type {
-				case query.TBool:
-					v := cr.Bools(j)[i]
-					if boolDedup[v] {
-						continue
-					} else {
-						duplicateFlag = false
-					}
-					boolDedup[v] = true
-				case query.TInt:
-					v := cr.Ints(j)[i]
-					if intDedup[v] {
-						continue
-					} else {
-						duplicateFlag = false
-					}
-					intDedup[v] = true
-				case query.TUInt:
-					v := cr.UInts(j)[i]
-					if uintDedup[v] {
-						continue
-					} else {
-						duplicateFlag = false
-					}
-					uintDedup[v] = true
-				case query.TFloat:
-					v := cr.Floats(j)[i]
-					if floatDedup[v] {
-						continue
-					} else {
-						duplicateFlag = false
-					}
-					floatDedup[v] = true
-				case query.TString:
-					v := cr.Strings(j)[i]
-					if stringDedup[v] {
-						continue
-					} else {
-						duplicateFlag = false
-					}
-					stringDedup[v] = true
-				case query.TTime:
-					v := cr.Times(j)[i]
-					if timeDedup[v] {
-						continue
-					} else {
-						duplicateFlag = false
-					}
-					timeDedup[v] = true
-				}
-			}
-
+		for i := 0; i < l; i++ {
+			ts := cr.Times(colIdxTimestamp)[i]
+			_, duplicateFlag := uniqueTimestamps[ts]
 			if !duplicateFlag {
+				uniqueTimestamps[ts] = struct{}{}
 				execute.AppendRecord(i, cr, builder)
 			}
 		}
