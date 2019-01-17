@@ -10,6 +10,7 @@ import (
 )
 
 const DedupKind = "dedup"
+const DedupSortCol = "_time"
 
 type DedupOpSpec struct {
 }
@@ -118,7 +119,7 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 	stringDedup = make(map[string]bool)
 	timeDedup = make(map[execute.Time]bool)
 
-	return b.Do(func(cr query.ColReader) error {
+	_ = b.Do(func(cr query.ColReader) error {
 		l := cr.Len()
 		colCount := len(builder.Cols())
 		// loop over the records
@@ -185,6 +186,12 @@ func (t *dedupTransformation) Process(id execute.DatasetID, b query.Table) error
 		}
 		return nil
 	})
+
+	colsToSort := make([]string, 1)
+	colsToSort[0] = DedupSortCol
+	builder.Sort(colsToSort, false)
+
+	return nil
 }
 
 func (t *dedupTransformation) UpdateWatermark(id execute.DatasetID, mark execute.Time) error {
